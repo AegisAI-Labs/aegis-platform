@@ -27,6 +27,10 @@ tests/
 scripts/
 ```
 
+# Prerequisites
+
+- Python 3.12 (the repository version is pinned in `.python-version`).
+
 ---
 
 # Development Process
