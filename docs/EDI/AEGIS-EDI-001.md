@@ -27,12 +27,21 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 
 ---
 
+# Revision History
+
+| Version | Date | Changes |
+|----------|------|---------|
+| 1.0 | 2026-09-27 | Engineering Decision Index established. |
+| 1.1 | 2026-09-28 | Added FastAPI Foundation traceability (RFC-002, ADR-001, EPIC-002). |
+
+---
+
 # Decision Register
 
 | Decision | Status | Owner | Latest Stage |
 |----------|--------|-------|--------------|
 | Platform Foundation | Implemented | Kader Beevi | Documentation |
-| FastAPI Foundation | Planned | Kader Beevi | RFC |
+| FastAPI Foundation | Accepted | Kader Beevi | ADR |
 | LangGraph Engine | Planned | Kader Beevi | RFC |
 | RAG Architecture | Planned | Kader Beevi | RFC |
 
@@ -44,9 +53,8 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 |----------|-------------------|
 | PRD-001 | RFC-001, SRS-001 |
 | RFC-001 | PRD-001, SRS-001, C4-001 |
-| SRS-001 | RFC-001 |
-| C4-001 | RFC-001 |
-| ADR-000 | Future ADRs |
+| RFC-002 | ADR-001, SRS-001, C4-001 |
+| ADR-001 | RFC-002, C4-001, EPIC-002 |
 
 ---
 
@@ -60,22 +68,33 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | RFC | AEGIS-RFC-001 |
 | SRS | AEGIS-SRS-001 |
 | C4 | AEGIS-C4-001 |
-| ADR | Template Created |
-| Issue | TBD |
-| Commit | Commit #1 |
-| Tests | N/A |
-| Deployment | N/A |
+| ADR | AEGIS-ADR-000 |
+| Epic | EPIC-001 |
+
+---
+
+## FastAPI Platform Foundation
+
+| Stage | Reference |
+|--------|-----------|
+| PRD | AEGIS-PRD-001 |
+| RFC | AEGIS-RFC-002 |
+| SRS | AEGIS-SRS-001 |
+| C4 | AEGIS-C4-001 |
+| ADR | AEGIS-ADR-001 |
+| Epic | EPIC-002 |
 
 ---
 
 # Implementation Tracker
 
-| Feature | Issue | Commit | Status |
-|----------|-------|--------|--------|
-| Documentation Foundation | TBD | Commit #1 | Completed |
-| FastAPI Setup | TBD | Pending | Planned |
-| LangGraph | TBD | Pending | Planned |
-| Kafka | TBD | Pending | Planned |
+| Epic | Feature | Status |
+|------|---------|--------|
+| EPIC-001 | Platform Foundation | Completed |
+| EPIC-002 | FastAPI Platform Foundation | In Progress |
+| EPIC-003 | Agent Orchestration | Planned |
+| EPIC-004 | RAG Engine | Planned |
+| EPIC-005 | Event Streaming | Planned |
 
 ---
 
