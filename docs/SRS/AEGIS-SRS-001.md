@@ -3,11 +3,11 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
-**Last Updated:** 2026-09-28
+**Last Updated:** 2026-09-29
 
 ## Related Artifacts
 
@@ -26,6 +26,7 @@
 |----------|------|---------|
 | 1.0 | 2026-09-27 | Initial platform requirements established. |
 | 1.1 | 2026-09-28 | Added FastAPI API Foundation requirements, health endpoints, OpenAPI requirements, and implementation traceability. |
+| 1.2 | 2026-09-29 | Added Agent Orchestration requirements, streaming responses, tool execution, and state management. |
 
 ---
 
@@ -164,6 +165,42 @@ Future integrations include:
 - OpenAI SDK
 - Tool Calling
 - Evaluation Engine
+
+---
+
+## FR-006 — Agent Orchestration
+
+The platform shall execute multi-step workflows through LangGraph.
+
+Requirements:
+
+- StateGraph execution
+- deterministic transitions
+- retry capability
+
+---
+
+## FR-007 — Tool Execution
+
+Agents shall invoke internal tools through standardized interfaces.
+
+Requirements:
+
+- typed inputs
+- typed outputs
+- isolated execution
+
+---
+
+## FR-008 — Streaming Responses
+
+The platform shall support token streaming.
+
+Acceptance Criteria:
+
+- streaming endpoint
+- incremental delivery
+- graceful completion
 
 ---
 
@@ -344,7 +381,10 @@ Future SRS revisions will add requirements for:
 - Qdrant vector search
 - Evaluation framework
 - Multi-agent workflows
-- Production authentication
+- Production
+- multi-agent
+- memory management
+- human approval workflows
 
 ---
 

@@ -4,10 +4,10 @@
 >Context - System Boundaries, Container - Application Building blocks.
 # C4 Architecture – Level 1 & Level 2
 
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-09-28
+**Last Updated:** 2026-09-29
 
 ## Related Artifacts
 
@@ -26,6 +26,7 @@
 |----------|------|---------|
 | 1.0 | 2026-09-27 | Initial platform architecture. |
 | 1.1 | 2026-09-28 | Added FastAPI Gateway as the primary API entry point. |
+| 1.2 | 2026-09-29 | Added LangGraph orchestration layer. |
 
 ---
 
@@ -82,36 +83,8 @@ Current implementation focuses on:
 
 The platform is organized into independently deployable containers.
 
-```text
-                 Client
-                    |
-                    v
-      +-----------------------------+
-      |      FastAPI Gateway        |
-      |-----------------------------|
-      | REST APIs                   |
-      | OpenAPI                     |
-      | Health Endpoints            |
-      +-------------+---------------+
-                    |
-     +--------------+--------------+
-     |              |              |
-     v              v              v
-+-----------+ +------------+ +---------------+
-| Agent     | | Retriever  | | Evaluation    |
-| Service   | | Service    | | Service       |
-| (Future)  | | (Future)   | | (Future)      |
-+-----------+ +------------+ +---------------+
-                    |
-                    v
-           +----------------------+
-           | PostgreSQL (Future)  |
-           +----------------------+
-                    |
-                    v
-           +----------------------+
-           | Qdrant (Future)      |
-           +----------------------+
+![alt text](image.png)
+
 ```
 
 ---
