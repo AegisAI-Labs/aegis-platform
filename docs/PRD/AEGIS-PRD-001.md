@@ -1,6 +1,6 @@
 # AEGIS-PRD-001
 
-# Product Requirements Document 
+# Product Requirements Document
 >A PRD outlines **what** you are building, **who** it is for and **why** it matters. This includes the product's purpose, features, functionality and behavior.
 
 Version: 1.0
@@ -71,4 +71,3 @@ Its purpose is infrastructure.
 | Scope Creep | Weekly milestones |
 | Cloud Cost | Free tier usage |
 | Complexity | Incremental architecture |
-

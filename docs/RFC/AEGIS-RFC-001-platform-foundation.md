@@ -63,7 +63,7 @@ These will be covered by future RFCs.
 
 The project will follow this workflow:
 
-PRD → RFC → Review → SRS → C4 → ADR → Code → Tests → Deploy 
+PRD → RFC → Review → SRS → C4 → ADR → Code → Tests → Deploy
 
 Every major feature will require an RFC before implementation.
 

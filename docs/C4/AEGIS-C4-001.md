@@ -4,9 +4,9 @@
 >Context - System Boundaries, Container - Application Building blocks.
 # C4 Architecture – Level 1 & Level 2
 
-**Version:** 1.1  
-**Status:** Active  
-**Owner:** Kader Beevi  
+**Version:** 1.1
+**Status:** Active
+**Owner:** Kader Beevi
 **Last Updated:** 2026-09-28
 
 ## Related Artifacts

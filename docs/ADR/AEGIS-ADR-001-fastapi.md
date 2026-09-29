@@ -2,9 +2,9 @@
 
 # Adopt FastAPI as the Primary API Framework
 
-**Version:** 1.0  
-**Status:** Accepted  
-**Date:** 2026-09-28  
+**Version:** 1.0
+**Status:** Accepted
+**Date:** 2026-09-28
 **Owner:** Kader Beevi
 
 ## Related Artifacts

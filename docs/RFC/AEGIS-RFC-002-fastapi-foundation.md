@@ -2,13 +2,13 @@
 
 # FastAPI Foundation for Aegis AI Platform
 
-**Version:** 1.0  
-**Status:** Proposed  
-**Owner:** Kader Beevi  
-**Epic:** EPIC-002 – FastAPI Platform Foundation  
-**Related PRD:** AEGIS-PRD-001  
-**Related SRS:** AEGIS-SRS-001  
-**Future ADR:** AEGIS-ADR-001  
+**Version:** 1.0
+**Status:** Proposed
+**Owner:** Kader Beevi
+**Epic:** EPIC-002 – FastAPI Platform Foundation
+**Related PRD:** AEGIS-PRD-001
+**Related SRS:** AEGIS-SRS-001
+**Future ADR:** AEGIS-ADR-001
 **Last Updated:** 2026-09-28
 
 ---

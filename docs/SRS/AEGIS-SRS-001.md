@@ -3,10 +3,10 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.1  
-**Status:** Active  
-**Owner:** Kader Beevi  
-**Project:** Aegis AI Platform  
+**Version:** 1.1
+**Status:** Active
+**Owner:** Kader Beevi
+**Project:** Aegis AI Platform
 **Last Updated:** 2026-09-28
 
 ## Related Artifacts
