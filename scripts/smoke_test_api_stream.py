@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from services.api.main import app
+from aegis_platform.api.main import app
 
 client = TestClient(app)
 

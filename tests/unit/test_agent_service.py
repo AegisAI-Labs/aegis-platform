@@ -1,6 +1,6 @@
 import pytest
 
-from services.agent.service import AgentService
+from aegis_platform.agent.service import AgentService
 
 
 @pytest.mark.asyncio

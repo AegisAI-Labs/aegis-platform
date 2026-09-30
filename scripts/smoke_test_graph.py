@@ -1,4 +1,4 @@
-from services.agent.graph import app_graph
+from aegis_platform.agent.graph import app_graph
 
 cases = [
     {"user_input": "Hello Aegis!"},

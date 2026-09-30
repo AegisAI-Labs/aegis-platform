@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
-from services.agent.service import AgentService
-from services.api.models import AgentRequest, AgentResponse
+from aegis_platform.agent.service import AgentService
+from aegis_platform.api.models import AgentRequest, AgentResponse
 
 app = FastAPI(title="Aegis AI Platform")
 

@@ -1,4 +1,4 @@
-from services.agent.graph import app_graph
+from aegis_platform.agent.graph import app_graph
 
 
 def test_app_graph():

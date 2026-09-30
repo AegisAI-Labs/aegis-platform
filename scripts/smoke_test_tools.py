@@ -1,4 +1,4 @@
-from services.agent.tools import calculator
+from aegis_platform.agent.tools import calculator
 
 cases = [
     "2+2",

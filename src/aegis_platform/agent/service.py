@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 
-from services.agent.graph import app_graph
+from aegis_platform.agent.graph import app_graph
 
 
 class AgentService:

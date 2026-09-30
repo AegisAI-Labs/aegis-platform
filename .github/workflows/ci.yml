@@ -34,7 +34,7 @@ jobs:
 
       - name: MyPy
         run: |
-          uv run mypy services
+          uv run mypy src
 
       - name: Pytest
         run: |
@@ -44,7 +44,7 @@ jobs:
 # In local dev machine, we can to these validations manually:
 # uv run ruff check . # Check code quality with Ruff
 # uv run ruff check . --fix # Automatically fix code quality issues with Ruff
-# uv run mypy services # Check type hints with MyPy
+# uv run mypy src # Check type hints with MyPy
 # uv run pytest # Run tests with Pytest
 # uv run python -m scripts.smoke_test_agent # Run smoke test for the agent
 # uv run python -m scripts.smoke_test_tools # Run smoke test for the tools
