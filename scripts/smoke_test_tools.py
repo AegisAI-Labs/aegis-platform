@@ -12,3 +12,6 @@ for expression in cases:
     print(f"Expression: {expression} => Result: {result}")
     print("=== End of Case ===")
     print()
+
+# To run the smoke test for the tools:
+# uv run python -m scripts.smoke_test_tools

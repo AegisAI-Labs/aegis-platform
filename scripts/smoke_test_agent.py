@@ -19,4 +19,5 @@ for case in cases:
     print("=== End of Case ===")
     print()
 
+# To run the smoke test for the agent:
 # uv run python -m scripts.smoke_test_agent

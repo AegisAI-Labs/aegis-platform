@@ -243,3 +243,19 @@ When principles conflict, follow this order:
 >Every architectural decision must exist in one place only—the ADR.
 
 PRINCIPLES (Constitution) → PRD → RFC → SRS → C4 → ADR → EDI → GitHub Issue → Commit → Pull Request → Tests → Deployment
+
+## Provider Agnostic AI
+
+Aegis treats Large Language Models as interchangeable infrastructure.
+
+Business logic must never depend directly on a specific model provider.
+
+Instead, all model interactions flow through a provider abstraction layer.
+
+Benefits:
+
+- Multi-provider support
+- Easier testing
+- Cost optimization
+- Failover capability
+- Vendor independence
