@@ -3,11 +3,11 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
-**Last Updated:** 2026-09-29
+**Last Updated:** 2026-09-30
 
 ## Related Artifacts
 
@@ -27,6 +27,7 @@
 | 1.0 | 2026-09-27 | Initial platform requirements established. |
 | 1.1 | 2026-09-28 | Added FastAPI API Foundation requirements, health endpoints, OpenAPI requirements, and implementation traceability. |
 | 1.2 | 2026-09-29 | Added Agent Orchestration requirements, streaming responses, tool execution, and state management. |
+| 1.3 | 2026-09-30 | Added LLM provider abstraction requirements for multi-provider support, synchronous and streaming invocation, model configuration, timeouts, and error normalization. |
 
 ---
 
@@ -201,6 +202,23 @@ Acceptance Criteria:
 - streaming endpoint
 - incremental delivery
 - graceful completion
+
+---
+
+## FR-009 - LLM Provider Requirements
+
+The system shall:
+
+- Support multiple LLM providers through a common abstraction.
+- Prevent API and agent orchestration layers from depending directly on provider SDKs.
+- Support synchronous model invocation.
+- Support streaming model invocation.
+- Allow model selection through configuration.
+- Support configurable request timeouts.
+- Normalize provider-specific failures.
+- Prevent provider credentials from being stored in source control.
+- Allow providers to be independently tested.
+- Support future provider evaluation and comparison.
 
 ---
 

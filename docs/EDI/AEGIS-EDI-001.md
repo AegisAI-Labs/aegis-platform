@@ -3,10 +3,10 @@
 # Engineering Decision Index
 >This makes the project rather than a "documentation collection" to a "traceable engineering knowledge base"
 
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-09-29
+**Last Updated:** 2026-09-30
 
 Purpose: Provide complete traceability between product decisions, architecture decisions, implementation, testing, and documentation.
 
@@ -48,8 +48,9 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | Version | Date | Changes |
 |----------|------|---------|
 | 1.0 | 2026-09-27 | Initial Engineering Decision Index created. |
-| 1.1 | 2026-09-28 | Added FastAPI Foundation traceability (RFC-002, ADR-001, EPIC-002, v0.1.0). |
-| 1.2 | 2026-09-29 | Added Agent Orchestration Foundation (RFC-003, ADR-002, EPIC-003). |
+| 1.1 | 2026-09-28 | Added FastAPI Foundation traceability (RFC-002, ADR-002, EPIC-002, v0.1.0). |
+| 1.2 | 2026-09-29 | Added Agent Orchestration Foundation (RFC-003, ADR-003, EPIC-003). |
+| 1.3 | 2026-09-30 | Added LLM Provider Abstraction (RFC-004, ADR-004, EPIC-004). |
 
 ---
 
@@ -93,7 +94,7 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | RFC | AEGIS-RFC-002 |
 | SRS | AEGIS-SRS-001 v1.1 |
 | C4 | AEGIS-C4-001 v1.1 |
-| ADR | AEGIS-ADR-001 |
+| ADR | AEGIS-ADR-002 |
 | Epic | EPIC-002 |
 | Release | v0.1.0 |
 
@@ -107,9 +108,24 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | RFC | AEGIS-RFC-003 |
 | SRS | AEGIS-SRS-001 v1.2 |
 | C4 | AEGIS-C4-001 v1.2 |
-| ADR | AEGIS-ADR-002 |
+| ADR | AEGIS-ADR-003 |
 | Epic | EPIC-003 |
 | Planned Release | v0.2.0 |
+
+---
+
+## LLM Provider Abstraction
+
+| Stage | Reference |
+|--------|-----------|
+| PRD | AEGIS-PRD-001 |
+| RFC | AEGIS-RFC-004 |
+| SRS | AEGIS-SRS-001 v1.3 |
+| C4 | AEGIS-C4-001 v1.3 |
+| ADR | AEGIS-ADR-004 |
+| Epic | EPIC-004 |
+| Planned Release | v0.2.0 |
+
 
 ---
 

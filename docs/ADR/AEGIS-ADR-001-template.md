@@ -1,4 +1,4 @@
-# AEGIS-ADR-000
+# AEGIS-ADR-001
 
 # Architecture Decision Record
 

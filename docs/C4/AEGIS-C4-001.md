@@ -2,9 +2,9 @@
 >Context Container Component Code - This documentation talks about the architecture review.How is it structured?
 
 >Context - System Boundaries, Container - Application Building blocks.
-# C4 Architecture – Level 1 & Level 2
+# C4 Architecture – Level 1 & Level 2  & Level 3 & Level 4
 
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Active
 **Owner:** Kader Beevi
 **Last Updated:** 2026-09-29
@@ -83,9 +83,7 @@ Current implementation focuses on:
 
 The platform is organized into independently deployable containers.
 
-![alt text](image.png)
-
-```
+<img src="container-diagram-day4.png" alt="Component diagram" width="700">
 
 ---
 
@@ -99,6 +97,93 @@ The platform is organized into independently deployable containers.
 | Evaluation | AI evaluation (future) |
 | PostgreSQL | Metadata storage (future) |
 | Qdrant | Vector search (future) |
+
+---
+
+# Level 3 - Component Diagram
+
+<img src="component-diagram-day4.png" alt="Component diagram" width="700">
+
+Current Architecture — Simplified View
+
+```text
+                         ┌──────────────────────┐
+                         │       Client         │
+                         └──────────┬───────────┘
+                                    │
+                     ┌──────────────┴──────────────┐
+                     │                             │
+                     ▼                             ▼
+              /agent/run                   /agent/stream
+                     │                             │
+                     └──────────────┬──────────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │    Agent Service     │
+                         └──────────┬───────────┘
+                                    │
+                         ┌──────────┴──────────┐
+                         │                     │
+                         ▼                     ▼
+                  Run Agent              Stream Agent
+                         │                     │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │    Agent Graph       │
+                         │      LangGraph       │
+                         └──────────┬───────────┘
+                                    │
+                       ┌────────────┼────────────┐
+                       │            │            │
+                       ▼            ▼            ▼
+                  Agent State   Graph Nodes   Tool Registry
+                                                  │
+                                                  ▼
+                                           Tool Interface
+                                                  │
+                                                  ▼
+                                           Calculator Tool
+
+
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │  LLM Provider Layer  │
+                         │      (Boundary)      │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                              Provider Factory
+                                    │
+                                    ▼
+                            Provider Adapters
+                                    │
+                   ┌────────────────┼────────────────┐
+                   │                │                │
+                   ▼                ▼                ▼
+                OpenAI          Anthropic         Gemini
+              (future/Day 4)   (future/Day 4)   (future/Day 4)
+
+
+                         ┌──────────────────────┐
+                         │     Evaluation       │
+                         ├──────────────────────┤
+                         │ Evaluation Dataset   │
+                         │ Expected Outputs     │
+                         │ Evaluation Runner    │
+                         └──────────────────────┘
+
+```
+
+---
+
+# Level 4 - Code Tree
+
+![alt text](CodeTree-day4.png)
+
 
 ---
 

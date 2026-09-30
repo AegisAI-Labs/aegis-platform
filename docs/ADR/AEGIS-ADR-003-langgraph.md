@@ -1,4 +1,4 @@
-# AEGIS-ADR-002
+# AEGIS-ADR-003
 
 # Adopt LangGraph as the Agent Orchestration Framework
 
