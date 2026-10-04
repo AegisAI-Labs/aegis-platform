@@ -1,4 +1,4 @@
-from aegis_platform.agent.tools import calculator
+from aegis_platform.tools.calculator import calculator
 
 
 def test_calculator_addition():

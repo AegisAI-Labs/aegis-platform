@@ -3,8 +3,16 @@ from fastapi.responses import StreamingResponse
 
 from aegis_platform.agent.service import AgentService
 from aegis_platform.api.models import AgentRequest, AgentResponse
+from aegis_platform.config.settings import settings
+from aegis_platform.llm.factory import LLMProviderFactory
 
 app = FastAPI(title="Aegis AI Platform")
+
+llm_provider = LLMProviderFactory.create_llm_provider(settings)
+
+agent_service = AgentService(
+    llm_provider=llm_provider,
+)
 
 
 @app.get("/health", tags=["Health"])
@@ -20,9 +28,6 @@ def readiness():
 @app.get("/health/live", tags=["Health"])
 def liveness():
     return {"status": "live"}
-
-
-agent_service = AgentService()
 
 
 @app.post("/agent/run", response_model=AgentResponse, tags=["Agent"])
