@@ -537,8 +537,8 @@ def markdown_stream_table(
 def print_markdown_summary(
     calculator_stats: LatencyStats,
     fake_stats: LatencyStats,
-    real_generate_stats: LatencyStats,
-    stream_stats: StreamStats,
+    real_generate_stats: LatencyStats | None,
+    stream_stats: StreamStats | None,
 ) -> None:
     """Print a Markdown-ready summary."""
 
@@ -559,12 +559,18 @@ def print_markdown_summary(
 
     print("## Real LLM — Generate")
     print()
-    print(markdown_latency_table(real_generate_stats))
+    if real_generate_stats is None:
+        print("Not run (OPENAI_API_KEY not configured).")
+    else:
+        print(markdown_latency_table(real_generate_stats))
     print()
 
     print("## Real LLM — Stream")
     print()
-    print(markdown_stream_table(stream_stats))
+    if stream_stats is None:
+        print("Not run (OPENAI_API_KEY not configured).")
+    else:
+        print(markdown_stream_table(stream_stats))
     print()
 
 
@@ -576,12 +582,11 @@ def print_markdown_summary(
 async def main() -> None:
     """Execute all Day 4 latency experiments."""
 
-    if not settings.llm_model:
+    has_real_provider = bool(settings.openai_api_key) and settings.openai_api_key != "your-real-key"
+    if has_real_provider and not settings.llm_model:
         raise ValueError(
             "Set LLM_MODEL to a valid model before running the real-provider experiment."
         )
-
-    provider = LLMProviderFactory.create_llm_provider(settings)
 
     print_separator()
     print("Aegis AI Platform")
@@ -616,37 +621,43 @@ async def main() -> None:
         fake_stats,
     )
 
-    # ---------------------------------------------------------------
-    # Create real provider
-    # ---------------------------------------------------------------
+    real_generate_stats: LatencyStats | None = None
+    stream_stats: StreamStats | None = None
+    if not has_real_provider:
+        print("Skipping real LLM experiment: OPENAI_API_KEY is not configured.")
+    else:
+        # ---------------------------------------------------------------
+        # Create real provider
+        # ---------------------------------------------------------------
 
-    print()
-    print("Creating configured real LLM provider...")
+        print()
+        print("Creating configured real LLM provider...")
 
-    print(f"Provider implementation: " f"{type(provider).__name__}")
+        provider = LLMProviderFactory.create_llm_provider(settings)
+        print(f"Provider implementation: " f"{type(provider).__name__}")
 
-    # ---------------------------------------------------------------
-    # Scenario C
-    # ---------------------------------------------------------------
+        # ---------------------------------------------------------------
+        # Scenario C
+        # ---------------------------------------------------------------
 
-    real_generate_stats = await run_real_generate_experiment(
-        provider,
-    )
+        real_generate_stats = await run_real_generate_experiment(
+            provider,
+        )
 
-    print_latency_stats(
-        "Real LLM — Generate",
-        real_generate_stats,
-    )
+        print_latency_stats(
+            "Real LLM — Generate",
+            real_generate_stats,
+        )
 
-    # ---------------------------------------------------------------
-    # Scenario D
-    # ---------------------------------------------------------------
+        # ---------------------------------------------------------------
+        # Scenario D
+        # ---------------------------------------------------------------
 
-    stream_stats = await run_real_stream_experiment(
-        provider,
-    )
+        stream_stats = await run_real_stream_experiment(
+            provider,
+        )
 
-    print_stream_stats(stream_stats)
+        print_stream_stats(stream_stats)
 
     # ---------------------------------------------------------------
     # Markdown summary

@@ -12,14 +12,14 @@ performance, provider-routing, and optimization work.
 
 ### Scope
 
-This experiment evaluates:
+This Day 4 run evaluates:
 
 - Calculator/tool execution baseline
 - Fake LLM provider execution
-- Real LLM provider execution
-- Streaming response behavior
-- Time to first streamed chunk
-- Total response latency
+
+Real LLM generate and provider-level streaming (including time to first chunk)
+are deferred until a usable API key is configured. No live-provider latency or
+network behavior was measured in this run.
 
 The experiment does not attempt to benchmark LLM providers against each
 other. Provider selection and model quality are outside the scope of this
@@ -33,12 +33,17 @@ overhead compared with the underlying model/provider latency?
 ### Hypothesis
 
 The Aegis provider abstraction should add negligible latency compared with
-the network and model-inference latency of a real LLM provider.
+the network and model-inference latency of a real LLM provider. This comparison
+remains untested until the real-provider scenario is run.
 
 The abstraction should therefore allow provider independence without
 introducing a significant performance penalty.
 
 ## 2. Architecture Under Test
+
+The local baseline measured the calculator route and the fake-provider route
+through AgentService and LangGraph. The following real-provider path is planned
+but was not exercised in this run:
 
 Experiment script
    │
@@ -81,17 +86,18 @@ FakeLLMProvider
 | Python | 3.12.14 |
 | Aegis commit | 9c19d56db167d3037f0a7c30538767f7c76e1fe0 |
 | Provider SDK | openai 3.24.0 |
-| LLM provider | OpenAI (configured) |
-| Model | Not configured (`llm_model` is empty) |
-| Network | Not recorded (no live provider test) |
-| Test date | Not run (environment checked 2026-10-04) |
+| LLM provider | OpenAI selected; real provider not invoked |
+| Model | gpt-4o-mini configured; not used in local scenarios |
+| Network | Not used (local-only run) |
+| Test date | 2026-10-04 (local scenarios only) |
 
 ## 4. Methodology
 
-Each scenario is executed multiple times using the same input. Calculator,
+Each local scenario was executed 10 times using the same input. Calculator,
 fake-provider, and real generate measurements use AgentService and LangGraph;
 FastAPI transport is not included. Real stream measurements call the provider
-directly and are not comparable to API streaming latency.
+directly and are not comparable to API streaming latency. Real-provider
+measurements were skipped because the configured API key was not usable.
 
 The first execution is included in the reported sample and may include
 initialization or connection establishment effects.
@@ -173,6 +179,8 @@ Response handling
 
 ### Scenario C — Real LLM generate()
 
+Deferred to later implementation with a usable API key.
+
 Execution path:
 
 Experiment script
@@ -198,6 +206,8 @@ Provider response received
 Final application response returned
 
 ### Scenario D — Real LLM stream()
+
+Deferred to later implementation with a usable API key.
 
 This scenario measures OpenAIProvider.stream() directly. The current
 AgentService.stream() and /agent/stream endpoint still simulate streaming by
@@ -243,51 +253,38 @@ response latency.
 
 ## 7. Results
 
-Results will be populated after executing the experiment.
+The local-only run completed 10 iterations per measured scenario. Values below
+are the rounded figures printed by the experiment script.
 
 ### Calculator
 
 | Metric | Result |
 |---|---:|
-| Iterations | TBD |
-| Min | TBD |
-| Median | TBD |
-| Mean | TBD |
-| P95 | TBD |
-| Max | TBD |
+| Iterations | 10 |
+| Min | 0.0017 s |
+| Median | 0.0025 s |
+| Mean | 0.0027 s |
+| P95 | 0.0043 s |
+| Max | 0.0046 s |
 
 ### Fake LLM
 
 | Metric | Result |
 |---|---:|
-| Iterations | TBD |
-| Min | TBD |
-| Median | TBD |
-| Mean | TBD |
-| P95 | TBD |
-| Max | TBD |
+| Iterations | 10 |
+| Min | 0.0009 s |
+| Median | 0.0015 s |
+| Mean | 0.0015 s |
+| P95 | 0.0023 s |
+| Max | 0.0023 s |
 
 ### Real LLM — Generate
 
-| Metric | Result |
-|---|---:|
-| Iterations | TBD |
-| Min | TBD |
-| Median | TBD |
-| Mean | TBD |
-| P95 | TBD |
-| Max | TBD |
+Not run; a usable API key will be configured in a later implementation phase.
 
 ### Real LLM — Stream
 
-| Metric | Result |
-|---|---:|
-| Iterations | TBD |
-| TTFC | TBD |
-| Median TTFC | TBD |
-| P95 TTFC | TBD |
-| Total latency | TBD |
-| P95 total latency | TBD |
+Not run; provider-level streaming metrics are deferred with the real LLM run.
 
 ## 8. Provider Abstraction Overhead
 
@@ -314,34 +311,39 @@ Aegis control, including:
 - Request size
 - Response size
 
-Therefore, the results should be treated as an observed baseline rather
-than a universal provider performance guarantee.
+Future real-provider results should be treated as an observed baseline rather
+than a universal provider performance guarantee. This run has no such results.
 
 ## 10. Failure Observations
 
 | Failure | Observed? | Aegis Error |
 |---|---|---|
-| Timeout | No/TBD | ProviderTimeout |
-| Rate limit | No/TBD | ProviderRateLimited |
-| Authentication | No/TBD | ProviderAuthenticationError |
-| Unavailable | No/TBD | ProviderUnavailable |
-| Request failure | No/TBD | ProviderRequestError |
+| Timeout | Not tested | ProviderTimeout |
+| Rate limit | Not tested | ProviderRateLimited |
+| Authentication | Not tested | ProviderAuthenticationError |
+| Unavailable | Not tested | ProviderUnavailable |
+| Request failure | Not tested | ProviderRequestError |
 
 ## 11. Engineering Findings
 
-Pending the configured real-provider experiment. Provider-level streaming
-cannot establish API time-to-first-content with the current service.
+The calculator and fake-provider paths completed locally through AgentService
+and LangGraph. The run cannot establish provider-abstraction overhead relative
+to a real LLM, network latency, or streaming TTFC because no live request was
+made. Provider-level streaming would not establish API time-to-first-content
+with the current service.
 
 ## 12. Engineering Decision
 
 ### Decision
 
-Pending the experiment results.
+Keep the real-provider generate and stream scenarios for a later implementation
+with a usable API key. Do not treat the local-only results as evidence for or
+against real-provider performance.
 
 ### Rationale
 
 The provider abstraction offers potential benefits to evaluate alongside
-the measured latency:
+the future real-provider measurements:
 
 - Provider independence
 - Testability
@@ -359,7 +361,7 @@ Limitations include:
 
 - Small sample size
 - Single development environment
-- Single real provider/model
+- No real-provider or network measurements
 - No concurrent workload
 - No sustained load
 - No geographic distribution
