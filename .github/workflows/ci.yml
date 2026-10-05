@@ -28,17 +28,25 @@ jobs:
         run: |
           uv sync
 
+      # Code quality
       - name: Ruff
         run: |
           uv run ruff check .
 
+      # Type correctness
       - name: MyPy
         run: |
           uv run mypy src
 
+      # Tests
       - name: Pytest
         run: |
           uv run pytest
+
+      # Pre-commit Repository quality
+      - name: Pre-commit
+        run: |
+          uv run pre-commit run --all-files
 
 
 # In local dev machine, we can to these validations manually:

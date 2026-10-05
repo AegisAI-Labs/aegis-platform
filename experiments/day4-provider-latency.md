@@ -40,10 +40,7 @@ introducing a significant performance penalty.
 
 ## 2. Architecture Under Test
 
-Client
-   │
-   ▼
-FastAPI
+Experiment script
    │
    ▼
 AgentService
@@ -91,10 +88,13 @@ FakeLLMProvider
 
 ## 4. Methodology
 
-Each scenario is executed multiple times using the same input.
+Each scenario is executed multiple times using the same input. Calculator,
+fake-provider, and real generate measurements use AgentService and LangGraph;
+FastAPI transport is not included. Real stream measurements call the provider
+directly and are not comparable to API streaming latency.
 
-The first execution is treated separately where applicable because it may
-include initialization or connection establishment effects.
+The first execution is included in the reported sample and may include
+initialization or connection establishment effects.
 
 Measurements are collected using a monotonic clock.
 
@@ -126,9 +126,7 @@ That tells you that most requests are fast, but some requests are much slower.
 
 Execution path:
 
-User
- ↓
-FastAPI
+Experiment script
  ↓
 AgentService
  ↓
@@ -151,9 +149,7 @@ tool execution.
 
 Execution path:
 
-User
- ↓
-FastAPI
+Experiment script
  ↓
 AgentService
  ↓
@@ -169,7 +165,6 @@ external network or model latency.
 
 This provides a useful approximation of the latency introduced by:
 
-FastAPI
 AgentService
 LangGraph
 Provider abstraction
@@ -180,9 +175,7 @@ Response handling
 
 Execution path:
 
-User
- ↓
-FastAPI
+Experiment script
  ↓
 AgentService
  ↓
@@ -206,8 +199,10 @@ Final application response returned
 
 ### Scenario D — Real LLM stream()
 
-Streaming is particularly important because Day 4 introduces real provider
-streaming rather than the simulated word-by-word streaming used previously.
+This scenario measures OpenAIProvider.stream() directly. The current
+AgentService.stream() and /agent/stream endpoint still simulate streaming by
+splitting a completed generate() response into words, so these provider-level
+TTFC results must not be interpreted as API time-to-first-content.
 
 Execution path:
 
@@ -299,9 +294,9 @@ Results will be populated after executing the experiment.
 The experiment does not attempt to precisely isolate network latency,
 provider-side processing, model inference, and local application overhead.
 
-The FakeLLMProvider provides a useful approximation of the Aegis-side
-orchestration overhead, while the real-provider measurements establish
-end-to-end behavior.
+The FakeLLMProvider provides an approximation of AgentService and LangGraph
+overhead, while the real-provider generate measurements include that same
+path plus provider and network time. Neither includes FastAPI transport.
 
 A more rigorous decomposition will be performed during future performance
 and load-testing work.
@@ -334,31 +329,19 @@ than a universal provider performance guarantee.
 
 ## 11. Engineering Findings
 
-1. The FakeLLMProvider demonstrated that the provider abstraction adds
-   relatively small application-level overhead compared with real provider
-   execution.
+Pending the configured real-provider experiment. Provider-level streaming
+cannot establish API time-to-first-content with the current service.
 
-2. Real-provider latency was dominated by external provider/network behavior.
-
-3. Streaming significantly improved time-to-first-content compared with
-   waiting for the complete response.
-
-4. Provider-neutral interfaces did not require provider-specific logic in
-   AgentService or the API layer.
-
-5. Provider error normalization allowed the application layer to remain
-   independent of provider-specific exception types.
-
-   ## 12. Engineering Decision
+## 12. Engineering Decision
 
 ### Decision
 
-Retain the provider abstraction introduced in Day 4.
+Pending the experiment results.
 
 ### Rationale
 
-The measured application-layer overhead is acceptable relative to the
-latency of external LLM execution, while the abstraction provides:
+The provider abstraction offers potential benefits to evaluate alongside
+the measured latency:
 
 - Provider independence
 - Testability
