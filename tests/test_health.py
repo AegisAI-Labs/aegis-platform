@@ -1,11 +1,7 @@
 from fastapi.testclient import TestClient
 
-from aegis_platform.api.main import app
 
-client = TestClient(app)
-
-
-def test_health_returns_200():
+def test_health_returns_200(client: TestClient):
     """The general health endpoint should return HTTP 200."""
 
     response = client.get("/health")
@@ -14,7 +10,7 @@ def test_health_returns_200():
     assert response.json() == {"status": "healthy"}
 
 
-def test_live_returns_200():
+def test_live_returns_200(client: TestClient):
     """The liveness endpoint should return HTTP 200."""
 
     response = client.get("/health/live")
@@ -23,7 +19,7 @@ def test_live_returns_200():
     assert response.json()["status"] == "live"
 
 
-def test_ready_returns_200():
+def test_ready_returns_200(client: TestClient):
     """The readiness endpoint should return HTTP 200."""
 
     response = client.get("/health/ready")

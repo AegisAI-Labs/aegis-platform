@@ -2,7 +2,7 @@ import asyncio
 
 from aegis_platform.agent.graph import app_graph, tool_registry
 from aegis_platform.tools.calculator import calculator
-from scripts.stub_llm_provider import StubLLMProvider
+from tests.fakes import StubLLMProvider
 
 
 async def main() -> None:

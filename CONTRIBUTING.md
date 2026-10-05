@@ -171,4 +171,23 @@ Aegis values:
 - Security by default.
 - Decisions with clear traceability.
 
+## AI-Assisted Development
+
+AI coding assistants such as GitHub Copilot and Claude Code may be used
+during development.
+
+Contributors remain responsible for reviewing and validating AI-generated
+code before committing it.
+
+AI-assisted contributions must pass the same:
+
+- Tests
+- Linting
+- Type checking
+- Security checks
+- Code review
+- CI validation
+
+requirements as manually written code.
+
 Thank you for helping improve Aegis AI Platform.

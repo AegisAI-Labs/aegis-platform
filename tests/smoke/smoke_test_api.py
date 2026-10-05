@@ -3,7 +3,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from aegis_platform.llm.factory import LLMProviderFactory
-from scripts.stub_llm_provider import StubLLMProvider
+from tests.fakes import StubLLMProvider
 
 
 def main() -> None:
