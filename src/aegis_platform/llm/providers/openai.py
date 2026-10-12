@@ -1,6 +1,13 @@
 from collections.abc import AsyncIterator
 
-from openai import AsyncOpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    OpenAIError,
+    RateLimitError,
+)
 from openai.types.chat import ChatCompletionMessageParam
 
 from ..base import LLMProvider
@@ -64,7 +71,7 @@ class OpenAIProvider(LLMProvider):
                 stream=False,
             )
 
-        except Exception as exc:
+        except OpenAIError as exc:
             raise self._map_error(exc) from exc
 
         choice = response.choices[0]
@@ -107,28 +114,26 @@ class OpenAIProvider(LLMProvider):
                 if delta.content:
                     yield delta.content
 
-        except Exception as exc:
+        except OpenAIError as exc:
             raise self._map_error(exc) from exc
 
     @staticmethod
-    def _map_error(exc: Exception) -> Exception:
+    def _map_error(exc: OpenAIError) -> Exception:
         """
         Translate provider-specific exceptions into Aegis
         provider-neutral exceptions.
         """
 
-        error_name = type(exc).__name__.lower()
-
-        if "authentication" in error_name:
+        if isinstance(exc, AuthenticationError):
             return ProviderAuthenticationError("OpenAI authentication failed.")
 
-        if "rate" in error_name:
+        if isinstance(exc, RateLimitError):
             return ProviderRateLimited("OpenAI rate limit exceeded.")
 
-        if "timeout" in error_name:
+        if isinstance(exc, APITimeoutError):
             return ProviderTimeout("OpenAI request timed out.")
 
-        if "connection" in error_name:
+        if isinstance(exc, APIConnectionError):
             return ProviderUnavailable("OpenAI provider is unavailable.")
 
         return ProviderRequestError(f"OpenAI request failed: {exc}")

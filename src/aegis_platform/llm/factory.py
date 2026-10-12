@@ -22,14 +22,17 @@ class LLMProviderFactory:
         provider = settings.llm_provider.lower()  # Normalize the provider name
 
         if provider == "openai":
-            if not settings.openai_api_key:
+            api_key = settings.openai_api_key
+            model = settings.llm_model
+            timeout = settings.llm_timeout_seconds
+            if not api_key or api_key.strip() == "" or api_key is None:
                 raise ValueError(
                     "OpenAI API key is not configured in settings for LLM provider = openai"
                 )
             return OpenAIProvider(
-                api_key=settings.openai_api_key,
-                model=settings.llm_model,
-                timeout_seconds=settings.llm_timeout_seconds,
+                api_key=api_key,
+                model=model,
+                timeout_seconds=timeout,
             )
 
         raise ValueError(f"Unsupported LLM provider: {provider}")

@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 
 from aegis_platform.agent.graph import app_graph
 from aegis_platform.llm.base import LLMProvider
+from aegis_platform.llm.models import LLMRequest
 
 
 class AgentService:
@@ -14,7 +15,7 @@ class AgentService:
         self,
         llm_provider: LLMProvider,
     ) -> None:
-        self.llm_provider = llm_provider
+        self._llm_provider = llm_provider
 
     async def run(self, message: str) -> dict:
         result = await app_graph.ainvoke(
@@ -23,7 +24,7 @@ class AgentService:
                 "response": "",
                 "tool_used": "",
             },
-            config={"configurable": {"llm_provider": self.llm_provider}},
+            config={"configurable": {"llm_provider": self._llm_provider}},
         )
 
         return {
@@ -37,3 +38,8 @@ class AgentService:
         for word in result["response"].split():
             yield f"{word} "
             await asyncio.sleep(0.05)
+
+    async def stream_with_llm_response(self, request: LLMRequest) -> AsyncGenerator[str, None]:
+        """Yield model output as it arrives."""
+        async for word in self._llm_provider.stream(request):
+            yield word

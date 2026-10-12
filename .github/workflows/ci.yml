@@ -54,5 +54,6 @@ jobs:
 # uv run ruff check . --fix # Automatically fix code quality issues with Ruff
 # uv run mypy src # Check type hints with MyPy
 # uv run pytest # Run tests with Pytest
-# uv run python -m scripts.smoke_test_agent # Run smoke test for the agent
-# uv run python -m scripts.smoke_test_tools # Run smoke test for the tools
+
+# Run the Day 5 streaming reliability experiment with 10 iterations and live mode
+# uv run python -m scripts.experiments_day5_streaming_reliability --iterations 10 --live

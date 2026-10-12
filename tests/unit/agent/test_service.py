@@ -1,7 +1,7 @@
 import pytest
 
 from aegis_platform.agent.service import AgentService
-from aegis_platform.llm.models import LLMMessage
+from aegis_platform.llm.models import LLMMessage, LLMRequest
 from tests.fakes import StubLLMProvider
 
 
@@ -29,3 +29,13 @@ async def test_service_stream() -> None:
     chunks = [chunk async for chunk in service.stream("Hello")]
 
     assert chunks == ["Hello ", "from ", "the ", "stub ", "LLM "]
+
+
+@pytest.mark.asyncio
+async def test_service_stream_with_llm_response() -> None:
+    provider = StubLLMProvider()
+    request = LLMRequest(messages=[LLMMessage(role="user", content="Hello")])
+    chunks = [chunk async for chunk in AgentService(provider).stream_with_llm_response(request)]
+
+    assert chunks == ["Hello from the stub LLM"]
+    assert provider.requests == [request]
