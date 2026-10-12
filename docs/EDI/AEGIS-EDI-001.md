@@ -3,7 +3,7 @@
 # Engineering Decision Index
 >This makes the project rather than a "documentation collection" to a "traceable engineering knowledge base"
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Active
 **Owner:** Kader Beevi
 **Last Updated:** 2026-09-30
@@ -122,6 +122,18 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | RFC | AEGIS-RFC-004 |
 | SRS | AEGIS-SRS-001 v1.3 |
 | C4 | AEGIS-C4-001 v1.3 |
+| ADR | AEGIS-ADR-004 |
+| Epic | EPIC-004 |
+| Planned Release | v0.2.0 |
+
+## LLM Streaming
+
+| Stage | Reference |
+|--------|-----------|
+| PRD | AEGIS-PRD-001 |
+| RFC | AEGIS-RFC-005 |
+| SRS | AEGIS-SRS-001 v1.4 |
+| C4 | AEGIS-C4-001 v1.4 |
 | ADR | AEGIS-ADR-004 |
 | Epic | EPIC-004 |
 | Planned Release | v0.2.0 |

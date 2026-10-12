@@ -3,7 +3,7 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
@@ -219,6 +219,16 @@ The system shall:
 - Prevent provider credentials from being stored in source control.
 - Allow providers to be independently tested.
 - Support future provider evaluation and comparison.
+
+---
+
+## FR-010 - LLM Streaming and Reliability Requirements
+
+ - The platform shall support incremental LLM output streaming.
+ - The Agent Service shall consume LLM providers through a provider-independent abstraction.
+ - The platform shall translate provider-specific failures into normalized platform errors.
+ - The platform shall permit provider injection for automated tests.
+ - The existing agent execution and calculator tool shall continue to function.
 
 ---
 

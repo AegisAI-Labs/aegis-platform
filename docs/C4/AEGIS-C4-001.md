@@ -4,7 +4,7 @@
 >Context - System Boundaries, Container - Application Building blocks.
 # C4 Architecture – Level 1 & Level 2  & Level 3 & Level 4
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Active
 **Owner:** Kader Beevi
 **Last Updated:** 2026-09-29
@@ -98,6 +98,31 @@ The platform is organized into independently deployable containers.
 | PostgreSQL | Metadata storage (future) |
 | Qdrant | Vector search (future) |
 
+                         Client
+                           |
+                           v
+                       FastAPI API
+                           |
+                           v
+                       AgentService
+                           |
+                           v
+                        LangGraph
+                           |
+                 +---------+---------+
+                 |                   |
+                 v                   v
+             Tool Registry      LLM Interface
+                 |                   |
+                 v                   v
+           Calculator Tool     Provider Factory
+                                     |
+                                     v
+                               OpenAI Adapter
+                                     |
+                                     v
+                                  OpenAI API
+
 ---
 
 # Level 3 - Component Diagram
@@ -164,9 +189,10 @@ Current Architecture — Simplified View
                    ┌────────────────┼────────────────┐
                    │                │                │
                    ▼                ▼                ▼
-                OpenAI          Anthropic         Gemini
-              (future/Day 4)   (future/Day 4)   (future/Day 4)
-
+              OpenAI Adapter   Anthropic Adapter   Gemini Adapter
+                   │            (future)           (future)
+                   ▼
+                OpenAI API
 
                          ┌──────────────────────┐
                          │     Evaluation       │
