@@ -1,4 +1,4 @@
-"""Measure OpenAI provider streaming behavior and reliability scenarios."""
+"""Measure configured LLM provider streaming behavior and reliability scenarios."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import math
 import platform
 import statistics
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -24,6 +24,7 @@ from openai import (
 
 from aegis_platform.agent.service import AgentService
 from aegis_platform.config.settings import settings
+from aegis_platform.llm.base import LLMProvider
 from aegis_platform.llm.errors import (
     LLMProviderError,
     ProviderAuthenticationError,
@@ -32,10 +33,13 @@ from aegis_platform.llm.errors import (
     ProviderTimeout,
     ProviderUnavailable,
 )
+from aegis_platform.llm.factory import LLMProviderFactory
 from aegis_platform.llm.models import LLMMessage, LLMRequest, LLMResponse, LLMUsage
+from aegis_platform.llm.providers.nvidia import NvidiaProvider
 from aegis_platform.llm.providers.openai import OpenAIProvider
 
 DEFAULT_ITERATIONS = 10
+DEFAULT_LIVE_ITERATIONS = 2
 PROMPT = "Explain what an event-driven architecture is in three concise sentences."
 CALCULATOR_EXPRESSION = "25 * 17"
 
@@ -121,8 +125,22 @@ async def run_local_scenarios(iterations: int) -> None:
 def create_request() -> LLMRequest:
     return LLMRequest(
         messages=[LLMMessage(role="user", content=PROMPT)],
-        model=settings.llm_model,
     )
+
+
+def configured_model() -> str:
+    if settings.llm_provider.lower() == "nvidia":
+        return settings.nvidia_model
+    return settings.llm_model
+
+
+def configured_error_mapper() -> Callable[[OpenAIError], Exception]:
+    provider_name = settings.llm_provider.lower()
+    if provider_name == "nvidia":
+        return NvidiaProvider._map_error
+    if provider_name == "openai":
+        return OpenAIProvider._map_error
+    raise ValueError(f"Unsupported LLM provider: {provider_name}")
 
 
 def sdk_version() -> str:
@@ -152,10 +170,14 @@ def error_mapping_cases() -> list[tuple[str, OpenAIError, type[Exception]]]:
 
 
 def run_error_mapping_scenarios() -> bool:
-    print("\nError mapping scenarios (synthetic SDK exceptions; no network):")
+    error_mapper = configured_error_mapper()
+    print(
+        f"\nError mapping scenarios for {settings.llm_provider} "
+        "(synthetic SDK exceptions; no network):"
+    )
     passed = True
     for name, sdk_error, expected_type in error_mapping_cases():
-        mapped_error = OpenAIProvider._map_error(sdk_error)
+        mapped_error = error_mapper(sdk_error)
         matches = isinstance(mapped_error, expected_type)
         passed = passed and matches
         result = "PASS" if matches else "FAIL"
@@ -167,7 +189,7 @@ def run_error_mapping_scenarios() -> bool:
         response=Response(429, request=request),
         body={"code": "credit_balance_exhausted"},
     )
-    quota_error = OpenAIProvider._map_error(quota_sdk_error)
+    quota_error = error_mapper(quota_sdk_error)
     assert isinstance(quota_error, ProviderRateLimited)
     quota_error.__cause__ = quota_sdk_error
     quota_classification = describe_error(quota_error)
@@ -193,8 +215,11 @@ def is_quota_exhausted(error: LLMProviderError) -> bool:
     return describe_error(error).startswith("quota exhausted")
 
 
-async def run_generate_scenario(provider: OpenAIProvider, iterations: int) -> bool:
-    print(f"\nReal LLM generate() through AgentService/LangGraph ({iterations} iterations):")
+async def run_generate_scenario(provider: LLMProvider, iterations: int) -> bool:
+    print(
+        f"\n{type(provider).__name__} generate() through AgentService/LangGraph "
+        f"({iterations} iterations):"
+    )
     service = AgentService(provider)
     measurements: list[float] = []
     failures = 0
@@ -225,7 +250,7 @@ async def run_generate_scenario(provider: OpenAIProvider, iterations: int) -> bo
 
 
 async def measure_stream(
-    provider: OpenAIProvider,
+    provider: LLMProvider,
     iteration: int,
 ) -> StreamMeasurement | LLMProviderError:
     request = create_request()
@@ -258,8 +283,8 @@ async def measure_stream(
     return StreamMeasurement(time_to_first_chunk, total_duration, chunks_received)
 
 
-async def run_stream_scenario(provider: OpenAIProvider, iterations: int) -> bool:
-    print(f"\nReal LLM provider.stream() ({iterations} iterations):")
+async def run_stream_scenario(provider: LLMProvider, iterations: int) -> bool:
+    print(f"\n{type(provider).__name__}.stream() ({iterations} iterations):")
     measurements: list[StreamMeasurement] = []
     failures = 0
     quota_exhausted = False
@@ -298,7 +323,7 @@ def format_seconds(value: float | None) -> str:
     return f"{value:.4f}s" if value is not None else "not measured"
 
 
-async def measure_cancellation(provider: OpenAIProvider) -> None:
+async def measure_cancellation(provider: LLMProvider) -> None:
     print("\nCancellation scenario (cancel consumer after first non-empty chunk):")
     request = create_request()
     first_chunk = asyncio.Event()
@@ -374,17 +399,15 @@ async def measure_cancellation(provider: OpenAIProvider) -> None:
 
 
 async def run_live_scenarios(iterations: int) -> None:
-    if not settings.openai_api_key.strip() or settings.openai_api_key == "your-real-key":
-        print("\nLive LLM scenarios skipped: configure OPENAI_API_KEY to run them.")
-        return
-    if not settings.llm_model.strip():
-        print("\nLive LLM scenarios skipped: configure LLM_MODEL to run them.")
+    try:
+        provider = LLMProviderFactory.create_llm_provider(settings)
+    except ValueError as error:
+        print(f"\nLive LLM scenarios skipped: {error}")
         return
 
-    provider = OpenAIProvider(
-        api_key=settings.openai_api_key,
-        model=settings.llm_model,
-        timeout_seconds=settings.llm_timeout_seconds,
+    print(
+        f"\nLive provider: {type(provider).__name__}; "
+        f"model: {getattr(provider, 'model', configured_model())}"
     )
     try:
         quota_exhausted = await run_generate_scenario(provider, iterations)
@@ -399,7 +422,10 @@ async def run_live_scenarios(iterations: int) -> None:
 
         await measure_cancellation(provider)
     finally:
-        await provider.client.close()
+        client = getattr(provider, "client", None)
+        close = getattr(client, "close", None)
+        if close is not None:
+            await close()
 
 
 async def main() -> None:
@@ -407,22 +433,31 @@ async def main() -> None:
     parser.add_argument(
         "--live",
         action="store_true",
-        help="run real OpenAI generate, stream, and cancellation scenarios",
+        help="run configured-provider generate, stream, and cancellation scenarios",
     )
     parser.add_argument(
         "--iterations",
         type=int,
         default=DEFAULT_ITERATIONS,
-        help=f"iteration count for local and live scenarios (default: {DEFAULT_ITERATIONS})",
+        help=f"iteration count for local scenarios (default: {DEFAULT_ITERATIONS})",
+    )
+    parser.add_argument(
+        "--live-iterations",
+        type=int,
+        default=DEFAULT_LIVE_ITERATIONS,
+        help=f"iteration count for live scenarios (default: {DEFAULT_LIVE_ITERATIONS})",
     )
     arguments = parser.parse_args()
     if arguments.iterations < 1:
         parser.error("--iterations must be at least 1")
+    if arguments.live_iterations < 1:
+        parser.error("--live-iterations must be at least 1")
 
     print("Aegis Day 5 — Streaming Reliability Experiment")
     print(f"Python version: {platform.python_version()}")
     print(f"OpenAI SDK version: {sdk_version()}")
-    print(f"Model: {settings.llm_model}")
+    print(f"Provider: {settings.llm_provider}")
+    print(f"Model: {configured_model()}")
     print(f"Iterations: {arguments.iterations}")
     print(f"Prompt: {PROMPT}")
     print(f"Live API calls enabled: {arguments.live}")
@@ -430,7 +465,7 @@ async def main() -> None:
     mapping_passed = run_error_mapping_scenarios()
     await run_local_scenarios(arguments.iterations)
     if arguments.live:
-        await run_live_scenarios(arguments.iterations)
+        await run_live_scenarios(arguments.live_iterations)
     else:
         print("\nLive LLM scenarios not run; pass --live to enable paid API calls.")
 

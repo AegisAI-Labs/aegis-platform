@@ -4,12 +4,14 @@
 
 Repeat the main Day 4 baselines and extend the real-provider run with streaming
 reliability checks. The experiment measures calculator and fake-provider
-latency locally, then optionally measures real OpenAI `generate()` and
-`stream()` calls, SDK error mappings, and consumer cancellation.
+latency locally, then optionally measures the configured provider's
+`generate()` and `stream()` calls, SDK error mappings, and consumer
+cancellation.
 
 Real `generate()` runs through `AgentService` and LangGraph. Real streaming
-uses `OpenAIProvider.stream()` directly, as in Day 4; it does not measure
-FastAPI/SSE transport or compare providers.
+uses the configured provider's `stream()` method directly; it does not measure
+FastAPI/SSE transport or compare providers. Both OpenAI and NVIDIA adapters
+are supported through `LLMProviderFactory`.
 
 ## Run
 
@@ -20,36 +22,41 @@ uv run python scripts/experiment_day5_streaming_reliability.py
 ```
 
 This runs metadata collection, local error-mapping checks, and the calculator
-and fake-provider baselines. It does not call the OpenAI API. To enable the
-real-provider scenarios, configure `OPENAI_API_KEY` and `LLM_MODEL`, then run:
+and fake-provider baselines. It does not make API calls. To enable live
+scenarios, set `LLM_PROVIDER` to `nvidia` or `openai` and configure the matching
+credentials and model (`NVIDIA_API_KEY`/`NVIDIA_MODEL` or
+`OPENAI_API_KEY`/`LLM_MODEL`), then run:
 
 ```powershell
 uv run python scripts/experiment_day5_streaming_reliability.py --live
 ```
 
-The default is 10 iterations, matching Day 4. Set a smaller count for a
-cost-conscious live check, for example:
+Local scenarios default to 10 iterations. Live scenarios default to 2
+iterations independently, limiting optional API usage. Adjust the live count
+for a smaller check, for example:
 
 ```powershell
-uv run python scripts/experiment_day5_streaming_reliability.py --live --iterations 2
+uv run python scripts/experiment_day5_streaming_reliability.py --live --live-iterations 1
 ```
 
-The live run makes one generate request and one stream request per iteration,
-then one additional stream request for cancellation. SDK and LangGraph retries
-may increase the actual HTTP request count. A detected exhausted-quota error
-stops subsequent paid scenarios. The script prints runtime metadata and
-measurements; copy actual observations into the record below.
+The live run makes one generate request and one stream request per live
+iteration, then one additional stream request for cancellation. SDK and
+LangGraph retries may increase the actual HTTP request count. A detected
+exhausted-quota error stops subsequent paid scenarios. The script prints
+runtime metadata and measurements; copy actual observations into the record
+below.
 
 ## Environment Record
 
 | Property | Result |
 |---|---|
-| Test date | Pending live run |
-| Python version | 3.12.14 (offline harness validation) |
-| OpenAI SDK version | 3.24.0 (offline harness validation) |
-| Model used | `gpt-4o-mini` (configured model; offline harness validation) |
+| Test date | 2026-10-14 |
+| Python version | 3.12.14 |
+| OpenAI SDK version | 3.24.0 |
+| Provider configured | NVIDIA |
+| Model configured | `openai/gpt-oss-20b` (live scenarios not run) |
 | Operating system | Windows |
-| Network/environment notes | Offline validation only; live API scenarios not run |
+| Network/environment notes | Live API calls disabled; local scenarios and NVIDIA synthetic error mappings only |
 
 ## Test Scenarios
 
@@ -58,12 +65,12 @@ measurements; copy actual observations into the record below.
 2. **Fake LLM baseline:** Run the deterministic fake provider through
    `AgentService` and LangGraph for each configured iteration.
 3. **Real generate:** When `--live` is set, call `AgentService.run()` for each
-   iteration and record total latency or the classified provider error.
-4. **Real stream:** When `--live` is set, consume the provider stream to
+  live iteration and record total latency or the classified provider error.
+4. **Real stream:** When `--live` is set, consume the configured provider stream to
    completion. Record time to first non-empty chunk, total duration, chunk
    count, and any classified provider error.
 5. **Error classification:** Constructed OpenAI SDK exceptions are passed
-   through the adapter mapper without network calls. The expected mappings are
+  through the configured adapter's mapper without network calls. The expected mappings are
    authentication to `ProviderAuthenticationError`, rate limit to
    `ProviderRateLimited`, timeout to `ProviderTimeout`, connection failure to
    `ProviderUnavailable`, and other `OpenAIError` instances to
@@ -80,23 +87,27 @@ measurements; copy actual observations into the record below.
 
 | Metric | Result |
 |---|---:|
-| Iterations | Pending |
-| Min | Pending |
-| Median | Pending |
-| Mean | Pending |
-| P95 | Pending |
-| Max | Pending |
+| Iterations | 10 |
+| Successful | 10 |
+| Failures | 0 |
+| Min | 0.0010 s |
+| Median | 0.0012 s |
+| Mean | 0.0018 s |
+| P95 | 0.0038 s |
+| Max | 0.0052 s |
 
 ### Fake LLM Baseline
 
 | Metric | Result |
 |---|---:|
-| Iterations | Pending |
-| Min | Pending |
-| Median | Pending |
-| Mean | Pending |
-| P95 | Pending |
-| Max | Pending |
+| Iterations | 10 |
+| Successful | 10 |
+| Failures | 0 |
+| Min | 0.0009 s |
+| Median | 0.0014 s |
+| Mean | 0.0015 s |
+| P95 | 0.0022 s |
+| Max | 0.0023 s |
 
 ### Real LLM Generate
 
@@ -143,18 +154,19 @@ total duration, zero chunks, and reported error classification.
 
 | Scenario | SDK exception | Expected Aegis exception | Observed result |
 |---|---|---|---|
-| Authentication | `AuthenticationError` | `ProviderAuthenticationError` | Pending |
-| Rate limit | `RateLimitError` | `ProviderRateLimited` | Pending |
-| Exhausted quota | `RateLimitError` with `credit_balance_exhausted` | Quota exhausted; stop further paid scenarios | Pending |
-| Timeout | `APITimeoutError` | `ProviderTimeout` | Pending |
-| Connection | `APIConnectionError` | `ProviderUnavailable` | Pending |
-| Other SDK error | `OpenAIError` | `ProviderRequestError` | Pending |
+| Authentication | `AuthenticationError` | `ProviderAuthenticationError` | PASS |
+| Rate limit | `RateLimitError` | `ProviderRateLimited` | PASS |
+| Exhausted quota | `RateLimitError` with `credit_balance_exhausted` | Quota exhausted; stop further paid scenarios | PASS: quota exhausted (`credit_balance_exhausted`) |
+| Timeout | `APITimeoutError` | `ProviderTimeout` | PASS |
+| Connection | `APIConnectionError` | `ProviderUnavailable` | PASS |
+| Other SDK error | `OpenAIError` | `ProviderRequestError` | PASS |
 | Live request failures | As observed | As observed | Pending |
 
-The mapper rows test behavior with synthetic SDK exceptions; they do not prove
-how the remote service responds under real outage or quota conditions. The
-exhausted-quota row additionally checks the SDK error code used to avoid
-repeating paid requests after the account reports no usable credits.
+The mapper rows test the configured adapter with synthetic SDK exceptions;
+they do not prove how the remote service responds under real outage or quota
+conditions. The exhausted-quota row additionally checks the SDK error code
+used to avoid repeating paid requests after the account reports no usable
+credits.
 
 ### Cancellation
 
@@ -169,7 +181,7 @@ repeating paid requests after the account reports no usable credits.
 
 ## Known Limitations
 
-- Live results depend on network conditions, service load, account limits, and
+- Live-provider measurements depend on network conditions, service load, account limits, and
   model behavior; a small sequential run is not a production reliability or
   load test.
 - The calculator and fake-provider measurements are local baselines, not

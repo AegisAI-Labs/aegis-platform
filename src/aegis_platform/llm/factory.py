@@ -1,4 +1,5 @@
 from aegis_platform.config.settings import Settings
+from aegis_platform.llm.providers.nvidia import NvidiaProvider
 from aegis_platform.llm.providers.openai import OpenAIProvider
 
 from .base import LLMProvider
@@ -30,6 +31,20 @@ class LLMProviderFactory:
                     "OpenAI API key is not configured in settings for LLM provider = openai"
                 )
             return OpenAIProvider(
+                api_key=api_key,
+                model=model,
+                timeout_seconds=timeout,
+            )
+
+        if provider == "nvidia":
+            api_key = settings.nvidia_api_key
+            model = settings.nvidia_model
+            timeout = settings.llm_timeout_seconds
+            if not api_key or api_key.strip() == "" or api_key is None:
+                raise ValueError(
+                    "Nvidia API key is not configured in settings for LLM provider = nvidia"
+                )
+            return NvidiaProvider(
                 api_key=api_key,
                 model=model,
                 timeout_seconds=timeout,

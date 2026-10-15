@@ -30,22 +30,6 @@ class OpenAIProvider(LLMProvider):
 
     provider_name = "openai"
 
-    @staticmethod
-    def _messages(request: LLMRequest) -> list[ChatCompletionMessageParam]:
-        messages: list[ChatCompletionMessageParam] = []
-        for message in request.messages:
-            if message.role == "system":
-                messages.append({"role": "system", "content": message.content})
-            elif message.role == "developer":
-                messages.append({"role": "developer", "content": message.content})
-            elif message.role == "user":
-                messages.append({"role": "user", "content": message.content})
-            elif message.role == "assistant":
-                messages.append({"role": "assistant", "content": message.content})
-            else:
-                raise ValueError(f"Unsupported OpenAI message role: {message.role}")
-        return messages
-
     def __init__(
         self,
         api_key: str,
@@ -73,6 +57,9 @@ class OpenAIProvider(LLMProvider):
 
         except OpenAIError as exc:
             raise self._map_error(exc) from exc
+
+        if not response.choices:
+            raise ProviderRequestError("OpenAI returned no completion choices.")
 
         choice = response.choices[0]
 
@@ -116,6 +103,22 @@ class OpenAIProvider(LLMProvider):
 
         except OpenAIError as exc:
             raise self._map_error(exc) from exc
+
+    @staticmethod
+    def _messages(request: LLMRequest) -> list[ChatCompletionMessageParam]:
+        messages: list[ChatCompletionMessageParam] = []
+        for message in request.messages:
+            if message.role == "system":
+                messages.append({"role": "system", "content": message.content})
+            elif message.role == "developer":
+                messages.append({"role": "developer", "content": message.content})
+            elif message.role == "user":
+                messages.append({"role": "user", "content": message.content})
+            elif message.role == "assistant":
+                messages.append({"role": "assistant", "content": message.content})
+            else:
+                raise ValueError(f"Unsupported OpenAI message role: {message.role}")
+        return messages
 
     @staticmethod
     def _map_error(exc: OpenAIError) -> Exception:

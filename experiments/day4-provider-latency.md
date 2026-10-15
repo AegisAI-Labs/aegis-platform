@@ -16,10 +16,10 @@ This Day 4 run evaluates:
 
 - Calculator/tool execution baseline
 - Fake LLM provider execution
+- NVIDIA provider generate and provider-level streaming
 
-Real LLM generate and provider-level streaming (including time to first chunk)
-are deferred until a usable API key is configured. No live-provider latency or
-network behavior was measured in this run.
+The live scenarios use the configured NVIDIA provider. Generate requests run
+through AgentService and LangGraph; streaming calls the provider directly.
 
 The experiment does not attempt to benchmark LLM providers against each
 other. Provider selection and model quality are outside the scope of this
@@ -33,8 +33,9 @@ overhead compared with the underlying model/provider latency?
 ### Hypothesis
 
 The Aegis provider abstraction should add negligible latency compared with
-the network and model-inference latency of a real LLM provider. This comparison
-remains untested until the real-provider scenario is run.
+the network and model-inference latency of a real LLM provider. This run
+provides a live-provider baseline, but does not isolate abstraction overhead
+from network and model-inference latency.
 
 The abstraction should therefore allow provider independence without
 introducing a significant performance penalty.
@@ -42,8 +43,8 @@ introducing a significant performance penalty.
 ## 2. Architecture Under Test
 
 The local baseline measured the calculator route and the fake-provider route
-through AgentService and LangGraph. The following real-provider path is planned
-but was not exercised in this run:
+through AgentService and LangGraph. The live generate path also runs through
+AgentService and LangGraph; provider streaming is measured directly:
 
 Experiment script
    │
@@ -57,13 +58,13 @@ LangGraph
 LLMProvider
    │
    ▼
-OpenAIProvider
+NvidiaProvider
    │
    ▼
 Provider SDK
    │
    ▼
-External LLM API
+NVIDIA API
 
 For the fake-provider test:
 
@@ -84,20 +85,24 @@ FakeLLMProvider
 |---|---|
 | OS | Windows 11 |
 | Python | 3.12.14 |
-| Aegis commit | 9c19d56db167d3037f0a7c30538767f7c76e1fe0 |
-| Provider SDK | openai 3.24.0 |
-| LLM provider | OpenAI selected; real provider not invoked |
-| Model | gpt-4o-mini configured; not used in local scenarios |
-| Network | Not used (local-only run) |
-| Test date | 2026-10-04 (local scenarios only) |
+| Aegis commit | Not recorded |
+| Provider SDK | OpenAI-compatible SDK; version not recorded |
+| LLM provider | NVIDIA (`NvidiaProvider`) |
+| Model | `openai/gpt-oss-20b` (`NVIDIA_MODEL`) |
+| Network | Live NVIDIA API requests for generate and stream |
+| Test date | 2026-10-14 |
+
+The script header prints `LLM_MODEL` (`gpt-4o-mini`), but the NVIDIA factory
+selects `NVIDIA_MODEL` for requests. The measured NVIDIA model was therefore
+`openai/gpt-oss-20b`.
 
 ## 4. Methodology
 
-Each local scenario was executed 10 times using the same input. Calculator,
+Each scenario was executed 10 times using the same input. Calculator,
 fake-provider, and real generate measurements use AgentService and LangGraph;
 FastAPI transport is not included. Real stream measurements call the provider
-directly and are not comparable to API streaming latency. Real-provider
-measurements were skipped because the configured API key was not usable.
+directly and are not comparable to API streaming latency. The live generate
+and stream requests used the configured NVIDIA provider.
 
 The first execution is included in the reported sample and may include
 initialization or connection establishment effects.
@@ -177,9 +182,7 @@ Provider abstraction
 Provider invocation
 Response handling
 
-### Scenario C — Real LLM generate()
-
-Deferred to later implementation with a usable API key.
+### Scenario C — NVIDIA LLM generate()
 
 Execution path:
 
@@ -191,9 +194,9 @@ LangGraph
  ↓
 LLMProvider
  ↓
-OpenAIProvider
+NvidiaProvider
  ↓
-OpenAI API
+NVIDIA API
 Purpose
 
 Establish the end-to-end latency of the real provider integration.
@@ -205,11 +208,9 @@ Provider invocation start
 Provider response received
 Final application response returned
 
-### Scenario D — Real LLM stream()
+### Scenario D — NVIDIA LLM stream()
 
-Deferred to later implementation with a usable API key.
-
-This scenario measures OpenAIProvider.stream() directly. The current
+This scenario measures NvidiaProvider.stream() directly. The current
 AgentService.stream() and /agent/stream endpoint still simulate streaming by
 splitting a completed generate() response into words, so these provider-level
 TTFC results must not be interpreted as API time-to-first-content.
@@ -253,19 +254,20 @@ response latency.
 
 ## 7. Results
 
-The local-only run completed 10 iterations per measured scenario. Values below
-are the rounded figures printed by the experiment script.
+The run completed 10 iterations for each scenario. Values below are the
+rounded figures printed by the experiment script. All 10 live generate and
+stream requests completed without a reported error.
 
 ### Calculator
 
 | Metric | Result |
 |---|---:|
 | Iterations | 10 |
-| Min | 0.0017 s |
-| Median | 0.0025 s |
-| Mean | 0.0027 s |
-| P95 | 0.0043 s |
-| Max | 0.0046 s |
+| Min | 0.0014 s |
+| Median | 0.0019 s |
+| Mean | 0.0023 s |
+| P95 | 0.0046 s |
+| Max | 0.0062 s |
 
 ### Fake LLM
 
@@ -274,17 +276,36 @@ are the rounded figures printed by the experiment script.
 | Iterations | 10 |
 | Min | 0.0009 s |
 | Median | 0.0015 s |
-| Mean | 0.0015 s |
-| P95 | 0.0023 s |
-| Max | 0.0023 s |
+| Mean | 0.0016 s |
+| P95 | 0.0022 s |
+| Max | 0.0024 s |
 
-### Real LLM — Generate
+### NVIDIA LLM — Generate
 
-Not run; a usable API key will be configured in a later implementation phase.
+| Metric | Result |
+|---|---:|
+| Iterations | 10 |
+| Min | 1.2375 s |
+| Median | 2.5027 s |
+| Mean | 2.5527 s |
+| P95 | 4.7280 s |
+| Max | 5.1065 s |
 
-### Real LLM — Stream
+### NVIDIA LLM — Stream
 
-Not run; provider-level streaming metrics are deferred with the real LLM run.
+| Metric | Result |
+|---|---:|
+| Iterations | 10 |
+| Min TTFC | 0.7612 s |
+| Median TTFC | 1.2613 s |
+| Mean TTFC | 2.1033 s |
+| P95 TTFC | 4.4972 s |
+| Max TTFC | 5.3514 s |
+| Min Total | 1.3364 s |
+| Median Total | 1.9966 s |
+| Mean Total | 3.2557 s |
+| P95 Total | 7.3933 s |
+| Max Total | 8.1892 s |
 
 ## 8. Provider Abstraction Overhead
 
@@ -311,34 +332,37 @@ Aegis control, including:
 - Request size
 - Response size
 
-Future real-provider results should be treated as an observed baseline rather
-than a universal provider performance guarantee. This run has no such results.
+These NVIDIA results are an observed baseline rather than a universal provider
+performance guarantee. Streaming TTFC and total duration varied substantially
+across the 10 sequential samples.
 
 ## 10. Failure Observations
 
 | Failure | Observed? | Aegis Error |
 |---|---|---|
-| Timeout | Not tested | ProviderTimeout |
-| Rate limit | Not tested | ProviderRateLimited |
-| Authentication | Not tested | ProviderAuthenticationError |
-| Unavailable | Not tested | ProviderUnavailable |
-| Request failure | Not tested | ProviderRequestError |
+| Timeout | Not observed | ProviderTimeout |
+| Rate limit | Not observed | ProviderRateLimited |
+| Authentication | Not observed | ProviderAuthenticationError |
+| Unavailable | Not observed | ProviderUnavailable |
+| Request failure | Not observed | ProviderRequestError |
 
 ## 11. Engineering Findings
 
 The calculator and fake-provider paths completed locally through AgentService
-and LangGraph. The run cannot establish provider-abstraction overhead relative
-to a real LLM, network latency, or streaming TTFC because no live request was
-made. Provider-level streaming would not establish API time-to-first-content
-with the current service.
+and LangGraph. Ten NVIDIA generate requests completed with a median latency of
+2.5027 s; ten provider-level streams had a median TTFC of 1.2613 s and median
+total duration of 1.9966 s. These measurements include network and provider
+behavior and do not isolate Aegis abstraction overhead. Provider-level
+streaming does not establish API time-to-first-content with the current
+service.
 
 ## 12. Engineering Decision
 
 ### Decision
 
-Keep the real-provider generate and stream scenarios for a later implementation
-with a usable API key. Do not treat the local-only results as evidence for or
-against real-provider performance.
+Retain the NVIDIA generate and stream scenarios as a live baseline. Do not
+interpret these 10 sequential samples as a production performance guarantee
+or as an isolated measurement of provider-abstraction overhead.
 
 ### Rationale
 
@@ -361,7 +385,6 @@ Limitations include:
 
 - Small sample size
 - Single development environment
-- No real-provider or network measurements
 - No concurrent workload
 - No sustained load
 - No geographic distribution
