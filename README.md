@@ -133,6 +133,36 @@ Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for the API
 documentation, or check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 to verify the service is running.
 
+### Live Smoke Tests
+
+With the API running, send a request to `/agent/run`:
+
+```powershell
+$body = @{ message = "Say hello in one sentence." } |
+		ConvertTo-Json
+
+Invoke-RestMethod `
+		-Uri "http://127.0.0.1:8000/agent/run" `
+		-Method Post `
+		-ContentType "application/json" `
+		-Body $body
+```
+
+Check the Server-Sent Events response from `/agent/stream` with `curl.exe`:
+
+```powershell
+curl.exe -N `
+	-X POST `
+	"http://127.0.0.1:8000/agent/stream" `
+	-H "Content-Type: application/json" `
+	--data-raw '{"message":"Explain streaming in two sentences."}'
+```
+
+Both requests call the configured LLM provider and may incur API usage. The
+current `/agent/stream` implementation waits for a completed response, then
+emits it as spaced word chunks. This smoke test checks the SSE response and
+incremental delivery, not provider time-to-first-token streaming.
+
 ---
 
 ## License
