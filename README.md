@@ -98,6 +98,43 @@ Every feature follows this workflow.
 
 ---
 
+## Run Locally
+
+Install the project dependencies:
+
+```powershell
+uv sync
+```
+
+Create a `.env` file in the repository root and configure one provider. For
+OpenAI:
+
+```dotenv
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+OPENAI_API_KEY=your-openai-api-key
+```
+
+Or for NVIDIA:
+
+```dotenv
+LLM_PROVIDER=nvidia
+NVIDIA_MODEL=openai/gpt-oss-20b
+NVIDIA_API_KEY=your-nvidia-api-key
+```
+
+Do not commit `.env` or API keys. Start the API from the repository root:
+
+```powershell
+uv run uvicorn aegis_platform.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for the API
+documentation, or check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+to verify the service is running.
+
+---
+
 ## License
 
 MIT License.

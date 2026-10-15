@@ -54,9 +54,9 @@ below.
 | Python version | 3.12.14 |
 | OpenAI SDK version | 3.24.0 |
 | Provider configured | NVIDIA |
-| Model configured | `openai/gpt-oss-20b` (live scenarios not run) |
+| Model configured | `openai/gpt-oss-20b` |
 | Operating system | Windows |
-| Network/environment notes | Live API calls disabled; local scenarios and NVIDIA synthetic error mappings only |
+| Network/environment notes | NVIDIA live calls enabled; 10 local iterations and 1 live iteration |
 
 ## Test Scenarios
 
@@ -66,15 +66,15 @@ below.
    `AgentService` and LangGraph for each configured iteration.
 3. **Real generate:** When `--live` is set, call `AgentService.run()` for each
   live iteration and record total latency or the classified provider error.
-4. **Real stream:** When `--live` is set, consume the configured provider stream to
-   completion. Record time to first non-empty chunk, total duration, chunk
-   count, and any classified provider error.
+4. **Real stream:** When `--live` is set, consume the configured provider
+  stream to completion. Record time to first non-empty chunk, total duration,
+  chunk count, and any classified provider error.
 5. **Error classification:** Constructed OpenAI SDK exceptions are passed
-  through the configured adapter's mapper without network calls. The expected mappings are
-   authentication to `ProviderAuthenticationError`, rate limit to
-   `ProviderRateLimited`, timeout to `ProviderTimeout`, connection failure to
-   `ProviderUnavailable`, and other `OpenAIError` instances to
-   `ProviderRequestError`.
+  through the configured adapter's mapper without network calls. The expected
+  mappings are authentication to `ProviderAuthenticationError`, rate limit
+  to `ProviderRateLimited`, timeout to `ProviderTimeout`, connection failure
+  to `ProviderUnavailable`, and other `OpenAIError` instances to
+  `ProviderRequestError`.
 6. **Cancellation:** A separate live stream is consumed until its first
    non-empty chunk, then the consumer task is cancelled. The script records
    chunks received before cancellation, whether cancellation propagates, and
@@ -91,10 +91,10 @@ below.
 | Successful | 10 |
 | Failures | 0 |
 | Min | 0.0010 s |
-| Median | 0.0012 s |
+| Median | 0.0013 s |
 | Mean | 0.0018 s |
-| P95 | 0.0038 s |
-| Max | 0.0052 s |
+| P95 | 0.0043 s |
+| Max | 0.0054 s |
 
 ### Fake LLM Baseline
 
@@ -104,48 +104,30 @@ below.
 | Successful | 10 |
 | Failures | 0 |
 | Min | 0.0009 s |
-| Median | 0.0014 s |
-| Mean | 0.0015 s |
-| P95 | 0.0022 s |
-| Max | 0.0023 s |
+| Median | 0.0012 s |
+| Mean | 0.0012 s |
+| P95 | 0.0015 s |
+| Max | 0.0017 s |
 
 ### Real LLM Generate
 
 | Run | Total duration | Error classification |
 |---|---:|---|
-| 1 | Pending | Pending |
-| 2 | Pending | Pending |
-| 3 | Pending | Pending |
-| 4 | Pending | Pending |
-| 5 | Pending | Pending |
-| 6 | Pending | Pending |
-| 7 | Pending | Pending |
-| 8 | Pending | Pending |
-| 9 | Pending | Pending |
-| 10 | Pending | Pending |
+| 1 | 5.6931 s | None |
 
-Record successful-run summary statistics and failure count from console output.
-Rows beyond the selected iteration count are not applicable. Live results are
-currently not measured.
+One live iteration completed successfully (1 successful, 0 failures). With a
+single sample, the measured latency was 5.6931 s; this is an observation, not a
+meaningful percentile estimate.
 
 ### Successful Stream
 
 | Run | Time to first chunk | Total streaming duration | Chunks received | Error classification |
 |---|---:|---:|---:|---|
-| 1 | Pending | Pending | Pending | Pending |
-| 2 | Pending | Pending | Pending | Pending |
-| 3 | Pending | Pending | Pending | Pending |
-| 4 | Pending | Pending | Pending | Pending |
-| 5 | Pending | Pending | Pending | Pending |
-| 6 | Pending | Pending | Pending | Pending |
-| 7 | Pending | Pending | Pending | Pending |
-| 8 | Pending | Pending | Pending | Pending |
-| 9 | Pending | Pending | Pending | Pending |
-| 10 | Pending | Pending | Pending | Pending |
+| 1 | 0.8389 s | 1.9371 s | 91 | None |
 
-Record TTFC, total-duration summary statistics, failure count, and chunk-count
-range from console output. Rows beyond the selected iteration count are not
-applicable.
+One live stream completed successfully (1 successful, 0 failures). The single
+sample had 0.8389 s TTFC, 1.9371 s total duration, and 91 content chunks; these
+values are observations, not meaningful percentile estimates.
 
 If the stream fails before yielding content, TTFC is not measured; record the
 total duration, zero chunks, and reported error classification.
@@ -160,7 +142,7 @@ total duration, zero chunks, and reported error classification.
 | Timeout | `APITimeoutError` | `ProviderTimeout` | PASS |
 | Connection | `APIConnectionError` | `ProviderUnavailable` | PASS |
 | Other SDK error | `OpenAIError` | `ProviderRequestError` | PASS |
-| Live request failures | As observed | As observed | Pending |
+| Live request failures | NVIDIA API | Aegis provider errors | None observed in this run |
 
 The mapper rows test the configured adapter with synthetic SDK exceptions;
 they do not prove how the remote service responds under real outage or quota
@@ -172,12 +154,12 @@ credits.
 
 | Measurement | Result |
 |---|---|
-| First chunk received | Pending |
-| Chunks received before cancellation | Pending |
-| Cancellation propagated to caller task | Pending |
-| Cancellation-to-local-task-exit | Pending |
+| First chunk received | Yes; TTFC 1.2543 s |
+| Chunks received before cancellation | 1 |
+| Cancellation propagated to caller task | Yes |
+| Cancellation-to-local-task-exit | 0.0007 s |
 | Remote generation confirmed stopped | Not observable from this client |
-| Error classification, if any | Pending |
+| Error classification, if any | None |
 
 ## Known Limitations
 
