@@ -3,10 +3,10 @@
 # Engineering Decision Index
 >This makes the project rather than a "documentation collection" to a "traceable engineering knowledge base"
 
-**Version:** 1.4
+**Version:** 1.5
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-09-30
+**Last Updated:** 2026-10-18
 
 Purpose: Provide complete traceability between product decisions, architecture decisions, implementation, testing, and documentation.
 
@@ -51,6 +51,7 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | 1.1 | 2026-09-28 | Added FastAPI Foundation traceability (RFC-002, ADR-002, EPIC-002, v0.1.0). |
 | 1.2 | 2026-09-29 | Added Agent Orchestration Foundation (RFC-003, ADR-003, EPIC-003). |
 | 1.3 | 2026-09-30 | Added LLM Provider Abstraction (RFC-004, ADR-004, EPIC-004). |
+| 1.5 | 2026-10-18 | Added Day 6 multi-provider traceability from RFC-006 through ADR, implementation, tests, and experiments. |
 
 ---
 
@@ -61,6 +62,7 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | Platform Documentation Foundation | Completed | EPIC-001 | Kader Beevi |
 | FastAPI Platform Foundation | Completed | ADR-001 | Kader Beevi |
 | LangGraph Agent Foundation | Accepted | ADR-002 | Kader Beevi |
+| Multi-Provider LLM Support | Accepted | Kader Beevi | ADR-006; RFC-006 implementation and validation evidence |
 | Tool Registry Architecture | Planned | RFC | Kader Beevi |
 | Streaming Agent Responses | Planned | RFC | Kader Beevi |
 | RAG Architecture | Planned | RFC | Kader Beevi |
@@ -138,6 +140,20 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | Epic | EPIC-004 |
 | Planned Release | v0.2.0 |
 
+## Multi-Provider Support — Day 6
+
+Primary decision and requirement sources: [RFC-006](../RFC/AEGIS-RFC-006-Multi-Provider-Support),
+[SRS-001](../SRS/AEGIS-SRS-001.md), [C4-001](../C4/AEGIS-C4-001.md), and
+[ADR-006](../ADR/AEGIS-ADR-006-multi-provider-default.md).
+
+| RFC-006 acceptance criteria | Requirement | Implementation | Tests | Experiment evidence |
+|---|---|---|---|---|
+| AC-1, AC-2, AC-4 | Configurable selection, NVIDIA default, OpenAI alternative, credentials | [Settings](../../src/aegis_platform/config/settings.py), [factory](../../src/aegis_platform/llm/factory.py) | [factory tests](../../tests/unit/llm/test_factory.py): OpenAI selection, missing OpenAI key, unsupported provider | [Day 5 report](../../experiments/day5-streaming-reliability.md) records NVIDIA selected. **Gap:** no factory test explicitly verifies NVIDIA default/selection or missing NVIDIA credentials. |
+| AC-3, AC-5 | Shared generation contract and normalized response/usage metadata | [LLM interface](../../src/aegis_platform/llm/base.py), [models](../../src/aegis_platform/llm/models.py), [NVIDIA adapter](../../src/aegis_platform/llm/providers/nvidia.py), [OpenAI adapter](../../src/aegis_platform/llm/providers/openai.py) | [NVIDIA tests](../../tests/unit/llm/test_nvidia_provider.py) and [OpenAI tests](../../tests/unit/llm/test_openai_provider.py) verify content, model, provider, usage, and error mapping | [Day 4 report](../../experiments/day4-provider-latency.md) and [Day 5 report](../../experiments/day5-streaming-reliability.md) contain NVIDIA generate observations. |
+| AC-6 | Incremental adapter streaming and normalized stream errors | Provider `stream()` implementations in both adapters | Both provider test files cover yielded chunks; OpenAI tests cover stream timeout. **Gap:** no NVIDIA stream-error test currently asserts error propagation. | Day 4 records 10 NVIDIA stream runs; Day 5 records one live stream and cancellation. `/agent/stream` smoke coverage is [here](../../tests/smoke/test_api_stream.py); it tests SSE delivery, not provider-token streaming. |
+| AC-7, AC-8 | Preserve agent, graph, calculator, and API behavior; type checks and CI | [AgentService](../../src/aegis_platform/agent/service.py), [graph](../../src/aegis_platform/agent/graph.py), [API](../../src/aegis_platform/api/main.py) | [unit](../../tests/unit/), [integration](../../tests/integration/), and [smoke tests](../../tests/smoke/) | The Day 4/Day 5 experiment runs record local and live behavior; RFC-006 CI/type-check acceptance is not asserted by these experiment reports. |
+| AC-9, AC-10 | Repeatable experiments and documented model-specific results/limitations | [Day 4 script](../../scripts/experiment_day4_latency.py), [Day 5 script](../../scripts/experiment_day5_streaming_reliability.py) | Experiment harnesses use local fakes and optional live calls | [Day 4 results](../../experiments/day4-provider-latency.md) and [Day 5 results](../../experiments/day5-streaming-reliability.md); Day 5 live data is a single iteration and not a general performance claim. |
+
 
 ---
 
@@ -149,10 +165,12 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | RFC-001 | PRD-001, SRS-001, C4-001 |
 | RFC-002 | ADR-001, SRS-001, C4-001 |
 | RFC-003 | ADR-002, SRS-001, C4-001 |
+| RFC-006 | SRS-001 FR-009, C4-001, ADR-006, implementation, tests, Day 4/Day 5 experiments |
 | ADR-001 | RFC-002, EPIC-002 |
 | ADR-002 | RFC-003, EPIC-003 |
-| SRS-001 | PRD-001, RFC-001, RFC-002, RFC-003 |
-| C4-001 | RFC-001, RFC-002, RFC-003 |
+| ADR-006 | RFC-006, SRS-001, C4-001, implementation, tests, experiment evidence |
+| SRS-001 | PRD-001, RFC-001, RFC-002, RFC-003, RFC-006, ADR-006 |
+| C4-001 | RFC-001, RFC-002, RFC-003, RFC-006, ADR-006 |
 | EPIC-001 | v0.1.0 |
 | EPIC-002 | v0.1.0 |
 | EPIC-003 | v0.2.0 |
@@ -200,13 +218,12 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 
 The following work requires future RFCs before implementation.
 
-| Future RFC | Purpose |
-|------------|---------|
-| RFC-004 | Tool Registry |
-| RFC-005 | RAG Architecture |
-| RFC-006 | Kafka Event Streaming |
-| RFC-007 | Evaluation Framework |
-| RFC-008 | Multi-Agent Collaboration |
+| Future Work Topic | Purpose |
+|-------------------|---------|
+| RAG Architecture | Define retrieval and vector-search integration |
+| Kafka Event Streaming | Define asynchronous event processing |
+| Evaluation Framework | Define evaluation datasets, runners, and result tracking |
+| Multi-Agent Collaboration | Define agent coordination and handoffs |
 
 ---
 

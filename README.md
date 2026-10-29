@@ -133,6 +133,22 @@ Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for the API
 documentation, or check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 to verify the service is running.
 
+### Run with Docker
+
+Make sure Docker Desktop is running. From the repository root, build the image
+and start the container with the provider settings from `.env`:
+
+```powershell
+docker build -t aegis-platform .
+docker run --rm --name aegis-platform -p 8000:8000 --env-file .env aegis-platform
+```
+
+The API is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs),
+and the health check is at [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health).
+Press `Ctrl+C` to stop and remove the container. The `.dockerignore` excludes
+`.env` from the image; `--env-file` supplies its settings only when the
+container starts.
+
 ### Live Smoke Tests
 
 With the API running, send a request to `/agent/run`:

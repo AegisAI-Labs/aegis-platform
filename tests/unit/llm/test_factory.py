@@ -21,6 +21,20 @@ def test_factory_creates_openai_provider() -> None:
     provider.assert_called_once_with(api_key="test-key", model="test-model", timeout_seconds=12.0)
 
 
+def test_factory_creates_nvidia_provider() -> None:
+    settings = Settings(
+        llm_provider="NVIDIA",
+        nvidia_api_key="test-key",
+        nvidia_model="test-model",
+        llm_timeout_seconds=12.0,
+    )
+    with patch("aegis_platform.llm.factory.NvidiaProvider") as provider:
+        result = LLMProviderFactory.create_llm_provider(settings)
+
+    assert result is provider.return_value
+    provider.assert_called_once_with(api_key="test-key", model="test-model", timeout_seconds=12.0)
+
+
 def test_factory_requires_openai_key() -> None:
     settings = Settings(llm_provider="openai", openai_api_key="")
     with pytest.raises(ValueError, match="OpenAI API key is not configured"):

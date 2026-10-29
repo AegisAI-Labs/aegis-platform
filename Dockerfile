@@ -14,10 +14,13 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 
 # Install production dependencies
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application source
 COPY . .
+
+# Install the application after its source is available
+RUN uv sync --frozen --no-dev
 
 # Expose FastAPI port
 EXPOSE 8000

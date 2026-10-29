@@ -3,18 +3,20 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.4
+**Version:** 1.5
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
-**Last Updated:** 2026-09-30
+**Last Updated:** 2026-10-18
 
 ## Related Artifacts
 
 - PRD: AEGIS-PRD-001
 - RFC-001: Platform Foundation
 - RFC-002: FastAPI Foundation
+- RFC-006: Multi-Provider Support
 - ADR-001: Adopt FastAPI
+- ADR-006: NVIDIA Default with OpenAI Alternative
 - C4: AEGIS-C4-001
 - EDI: AEGIS-EDI-001
 
@@ -28,6 +30,7 @@
 | 1.1 | 2026-09-28 | Added FastAPI API Foundation requirements, health endpoints, OpenAPI requirements, and implementation traceability. |
 | 1.2 | 2026-09-29 | Added Agent Orchestration requirements, streaming responses, tool execution, and state management. |
 | 1.3 | 2026-09-30 | Added LLM provider abstraction requirements for multi-provider support, synchronous and streaming invocation, model configuration, timeouts, and error normalization. |
+| 1.5 | 2026-10-18 | Clarified configurable NVIDIA/OpenAI selection, shared generation and streaming contracts, normalized errors, usage metadata, and RFC-006 traceability. |
 
 ---
 
@@ -205,20 +208,32 @@ Acceptance Criteria:
 
 ---
 
-## FR-009 - LLM Provider Requirements
+## FR-009 — Multi-Provider LLM Requirements
 
 The system shall:
 
-- Support multiple LLM providers through a common abstraction.
+- Select the LLM provider through configuration, defaulting to NVIDIA and supporting OpenAI as an alternative.
+- Use `LLMProviderFactory` to create the selected adapter without changing the existing API → AgentService → LangGraph execution path.
+- Require NVIDIA and OpenAI adapters to implement the common `LLMProvider` contract.
+- Support generation through `generate(request) -> LLMResponse` and incremental asynchronous streaming through `stream(request) -> AsyncIterator[str]`.
+- Use provider-neutral `LLMRequest`, `LLMResponse`, and `LLMUsage` models at the orchestration boundary.
+- Return provider and model identifiers with generation results and include input, output, and total token usage when the provider supplies it; usage fields may be unavailable.
+- Normalize provider SDK authentication, rate-limit, timeout, connection, and request failures into Aegis provider errors.
 - Prevent API and agent orchestration layers from depending directly on provider SDKs.
-- Support synchronous model invocation.
-- Support streaming model invocation.
-- Allow model selection through configuration.
-- Support configurable request timeouts.
-- Normalize provider-specific failures.
 - Prevent provider credentials from being stored in source control.
 - Allow providers to be independently tested.
 - Support future provider evaluation and comparison.
+
+Acceptance Criteria
+
+- NVIDIA is selected when `LLM_PROVIDER` is not supplied; OpenAI can be selected through configuration.
+- Provider-specific model IDs, credentials, and timeout settings are read from configuration.
+- Both adapters map generation content, provider, model, and available usage into `LLMResponse`.
+- Both adapters yield non-empty streamed content incrementally and map SDK failures into provider-neutral errors.
+- AgentService and LangGraph consume the shared interface and do not import provider SDKs.
+- Unit tests cover provider selection, adapter generation, streaming, usage mapping, and normalized errors.
+
+Related artifacts: RFC-006, ADR-006, C4-001, EDI-001.
 
 ---
 
@@ -377,6 +392,8 @@ Future deployment targets
 | OpenAPI | RFC-002 | ADR-001 |
 | Request Validation | RFC-002 | ADR-001 |
 | Python Foundation | RFC-002 | ADR-001 |
+| Multi-provider selection, common generation/streaming, normalized errors, and usage metadata | RFC-006 | ADR-006 |
+| LLM streaming reliability | RFC-005 | ADR-005 |
 
 ---
 
