@@ -247,6 +247,18 @@ Related artifacts: RFC-006, ADR-006, C4-001, EDI-001.
 
 ---
 
+## FR-011 - Provider Reliability
+- **FR-LLM-REL-001:** Configure maximum total attempts.
+- **FR-LLM-REL-002:** Retry only explicitly classified transient failures.
+- **FR-LLM-REL-003:** Do not retry authentication or invalid-request failures.
+- **FR-LLM-REL-004:** Enforce an overall deadline across attempts and backoff.
+- **FR-LLM-REL-005:** Propagate cancellation without retry.
+- **FR-LLM-REL-006:** Retry a stream only before the first chunk is delivered.
+- **FR-LLM-REL-007:** Never transparently restart a stream after partial output.
+- **FR-LLM-REL-008:** Record retry metadata without secrets or full prompt content.
+
+---
+
 # 4. Non-Functional Requirements
 
 ## NFR-001 — Performance
@@ -316,6 +328,15 @@ Requirements
 - Modular architecture
 - Consistent naming
 - Documentation-first workflow
+
+---
+
+## NFR - Provider Reliability
+- **NFR-LLM-REL-001:** Bound latency with a configurable deadline.
+- **NFR-LLM-REL-002:** Keep policy provider-neutral.
+- **NFR-LLM-REL-003:** Make behavior testable using fake providers and injected timing.
+- **NFR-LLM-REL-004:** Keep retry logic at one composition boundary.
+- **NFR-LLM-REL-005:** Keep credentials and full prompts out of logs.
 
 ---
 
@@ -430,6 +451,11 @@ Future SRS revisions will add requirements for:
 - multi-agent
 - memory management
 - human approval workflows
+
+---
+
+# 11. Verification
+Test success, recovery, exhaustion, permanent failures, deadline, cancellation, and stream failure before/after first chunk. Run NVIDIA/OpenAI contract tests without requiring live credentials.
 
 ---
 

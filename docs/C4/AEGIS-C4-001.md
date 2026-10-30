@@ -115,6 +115,7 @@ Request execution:
                                                     -> selected adapter
                                                         -> NVIDIA API
                                                         -> OpenAI API
+                                                  -> Reliability Wrapper
 
   LangGraph -> Tool Registry -> Calculator Tool
 ```
@@ -164,7 +165,8 @@ The current implementation includes:
 - AgentService and LangGraph execution path
 - Provider-neutral LLM interface and provider factory
 - NVIDIA adapter as the default provider and OpenAI as an alternative
-- Configuration-driven models, timeouts, and provider credentials
+- Configuration-driven models, timeouts, and provider credentials.
+- Provider Reliability Wrapper
 
 Other future containers remain planned until their respective RFCs are implemented.
 

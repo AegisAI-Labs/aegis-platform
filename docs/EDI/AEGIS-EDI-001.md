@@ -154,6 +154,18 @@ Primary decision and requirement sources: [RFC-006](../RFC/AEGIS-RFC-006-Multi-P
 | AC-7, AC-8 | Preserve agent, graph, calculator, and API behavior; type checks and CI | [AgentService](../../src/aegis_platform/agent/service.py), [graph](../../src/aegis_platform/agent/graph.py), [API](../../src/aegis_platform/api/main.py) | [unit](../../tests/unit/), [integration](../../tests/integration/), and [smoke tests](../../tests/smoke/) | The Day 4/Day 5 experiment runs record local and live behavior; RFC-006 CI/type-check acceptance is not asserted by these experiment reports. |
 | AC-9, AC-10 | Repeatable experiments and documented model-specific results/limitations | [Day 4 script](../../scripts/experiment_day4_latency.py), [Day 5 script](../../scripts/experiment_day5_streaming_reliability.py) | Experiment harnesses use local fakes and optional live calls | [Day 4 results](../../experiments/day4-provider-latency.md) and [Day 5 results](../../experiments/day5-streaming-reliability.md); Day 5 live data is a single iteration and not a general performance claim. |
 
+---
+
+# Day 7 Provider Reliability
+
+| Requirement | Decision | Implementation | Verification |
+|---|---|---|---|
+| FR-LLM-REL-001 | Bounded attempts | `RetryPolicy.max_attempts` | attempt-count tests |
+| FR-LLM-REL-002/003 | Explicit transient allowlist | `RetryingLLMProvider` | retryable/permanent tests |
+| FR-LLM-REL-004 | Overall deadline | reliability wrapper | deadline test |
+| FR-LLM-REL-005 | Cancellation propagation | async wrapper | cancellation test |
+| FR-LLM-REL-006/007 | Streaming safety | `stream()` | before/after first-chunk tests |
+| FR-LLM-REL-008 | Metadata-only logs | retry/failure events | logging review/tests |
 
 ---
 
