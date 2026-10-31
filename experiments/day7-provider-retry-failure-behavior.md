@@ -15,18 +15,79 @@
 
 ## Results
 
-| Scenario | Expected | Actual | Pass/Fail | Notes |
-|---|---|---|---|---|
-| Immediate success | 1 attempt | _fill in_ | _fill in_ | |
-| Transient failure then success | Recover within budget | _fill in_ | _fill in_ | |
-| All attempts fail | Stop at configured max | _fill in_ | _fill in_ | |
-| Permanent failure | No retry | _fill in_ | _fill in_ | |
-| Deadline | No attempt after deadline | _fill in_ | _fill in_ | |
-| Stream fails before first chunk | Retry if budget remains | _fill in_ | _fill in_ | |
-| Stream fails after first chunk | Propagate; no restart | _fill in_ | _fill in_ | |
-| Cancellation | Propagate; no retry | _fill in_ | _fill in_ | |
+(aegis-platform) PS C:\Users\kader\pers\learn\Aegis\aegis-platform> uv run python -m scripts.experiment_retry_reliability
+Retry reliability experiment (scripted provider; no network)
+Iterations per scenario: 10
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
 
-Record attempt counts and elapsed times. Mocked measurements do not establish real-world provider reliability.
+Generate retries a transient timeout:
+  recovery: iterations=10, mean=0.015075s, max=0.016265s
+  attempts=20; expected=20
+  result=PASS
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+llm_retry
+llm_retry
+llm_request_failed
+
+Generate stops at max_attempts when failures persist:
+  attempts=30; expected=30
+  result=PASS
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+llm_retry
+
+Stream retries a timeout before the first chunk:
+  recovery: iterations=10, mean=0.015507s, max=0.016020s
+  attempts=20; expected=20
+  result=PASS
+
+Stream does not retry after delivering partial output:
+  attempts=10; expected=10
+  result=PASS
+
+Overall: PASS
 
 ## Conclusion
 _Fill in after running the experiment, including deviations and follow-up work._

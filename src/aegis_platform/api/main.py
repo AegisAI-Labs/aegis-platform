@@ -13,13 +13,30 @@ from aegis_platform.llm.errors import (
     ProviderUnavailable,
 )
 from aegis_platform.llm.factory import LLMProviderFactory
+from aegis_platform.llm.reliability import RetryingLLMProvider, RetryPolicy
 
 app = FastAPI(title="Aegis AI Platform")
 
 llm_provider = LLMProviderFactory.create_llm_provider(settings)
 
+retrying_llm_provider = RetryingLLMProvider(
+    llm_provider,
+    policy=RetryPolicy(
+        max_attempts=3,
+        timeout_seconds=100,  # overall deadline, separate from the provider's 30s per-call timeout
+        initial_delay_seconds=1,
+        max_delay_seconds=5,
+        jitter=True,
+    ),
+    retryable_exceptions=(
+        ProviderRateLimited,
+        ProviderTimeout,
+        ProviderUnavailable,
+    ),
+)
+
 agent_service = AgentService(
-    llm_provider=llm_provider,
+    llm_provider=retrying_llm_provider,
 )
 
 
