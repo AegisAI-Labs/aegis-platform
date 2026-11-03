@@ -3,10 +3,10 @@
 # Engineering Decision Index
 >This makes the project rather than a "documentation collection" to a "traceable engineering knowledge base"
 
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-10-18
+**Last Updated:** 2026-11-02
 
 Purpose: Provide complete traceability between product decisions, architecture decisions, implementation, testing, and documentation.
 
@@ -63,8 +63,8 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | FastAPI Platform Foundation | Completed | ADR-001 | Kader Beevi |
 | LangGraph Agent Foundation | Accepted | ADR-002 | Kader Beevi |
 | Multi-Provider LLM Support | Accepted | Kader Beevi | ADR-006; RFC-006 implementation and validation evidence |
-| Tool Registry Architecture | Planned | RFC | Kader Beevi |
-| Streaming Agent Responses | Planned | RFC | Kader Beevi |
+| Tool Registry Architecture | Accepted | RFC | Kader Beevi |
+| Streaming Agent Responses | Accepted | RFC | Kader Beevi |
 | RAG Architecture | Planned | RFC | Kader Beevi |
 | Kafka Event Streaming | Planned | RFC | Kader Beevi |
 | Evaluation Framework | Planned | RFC | Kader Beevi |
@@ -167,6 +167,37 @@ Primary decision and requirement sources: [RFC-006](../RFC/AEGIS-RFC-006-Multi-P
 | FR-LLM-REL-006/007 | Streaming safety | `stream()` | before/after first-chunk tests |
 | FR-LLM-REL-008 | Metadata-only logs | retry/failure events | logging review/tests |
 
+---
+# Day 8 - Provider Observability
+
+| Requirement | Design Reference | Implementation |
+|---|---|---|
+| Vendor-neutral observability | RFC-004 | contracts.py |
+| Logical request metrics | OBS-FR-001..003 | instrumentation.py |
+| Streaming TTFT | OBS-FR-004 | instrumentation.py |
+| Stream interruption | OBS-FR-005 | instrumentation.py |
+| Token usage | OBS-FR-006 | instrumentation.py |
+| Retry visibility | ADR-004 | Retry callback |
+| Privacy-safe events | RFC-004 | events.py |
+| Correlation context | RFC-004 | context.py |
+| Unit testability | OBS-NFR-006 | In-memory sinks |
+
+## Implementation Status
+
+
+| Item | Status |
+|---|---|
+| RFC-008 | Drafted |
+| SRS Addendum | Drafted |
+| C4 Addendum | Drafted |
+| ADR-008 | Drafted |
+| Contracts | Pending |
+| Metrics Sink | Pending |
+| Event Sink | Pending |
+| Instrumentation | Pending |
+| Retry Callback | Pending |
+| Tests | Pending |
+| CI Validation | Pending |
 ---
 
 # Cross-Reference Matrix

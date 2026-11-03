@@ -4,10 +4,10 @@
 >Context - System Boundaries, Container - Application Building blocks.
 # C4 Architecture – Level 1 & Level 2  & Level 3 & Level 4
 
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-10-18
+**Last Updated:** 2026-11-02
 
 ## Related Artifacts
 
@@ -49,6 +49,8 @@ Current implementation focuses on:
 
 # Level 1 — System Context
 
+AEGIS requires operational visibility across multiple LLM providers without coupling observability to individual provider SDKs.
+
 ## Actors
 
 - End User
@@ -70,6 +72,7 @@ Current implementation focuses on:
         | FastAPI Gateway                           |
         | AI Agent Platform                         |
         | Observability                             |
+        | Reliability                             |
         | Future Event Processing                   |
         +----------------+--------------------------+
                          |
@@ -124,29 +127,58 @@ Request execution:
 
 # Level 3 - Component Diagram
 
-<img src="component-diagram-day4.png" alt="Component diagram" width="700">
 
-Current Architecture — Simplified View
 
-```mermaid
-flowchart TD
-    Client --> API[FastAPI endpoints]
-    API --> Service[AgentService]
-    Service --> Graph[LangGraph]
-    Graph --> ProviderContract[LLMProvider interface]
-    Graph --> Registry[Tool Registry]
-    Registry --> Calculator[Calculator Tool]
+## Component Responsibilities
 
-    Settings[Provider settings] --> Factory[LLMProviderFactory]
-    Factory -->|default| Nvidia[NVIDIA adapter]
-    Factory -->|configured alternative| OpenAI[OpenAI adapter]
-    Nvidia -. implements .-> ProviderContract
-    OpenAI -. implements .-> ProviderContract
-    Nvidia --> NvidiaAPI[NVIDIA API]
-    OpenAI --> OpenAIAPI[OpenAI API]
-    Evaluation[Evaluation framework (planned)] --> Dataset[Evaluation dataset]
-    Evaluation --> Runner[Evaluation runner]
+| Component | Responsibility |
+|---|---|
+| Agent Service | Agent orchestration and application-level execution |
+| ObservedLLMProvider | Logical request metrics and structured events |
+| RetryingLLMProvider | Retry policy and retry callback |
+| Provider Adapter | Provider SDK integration |
+| Metrics Sink | Vendor-neutral metric recording |
+| Event Sink | Structured event recording |
+
+## Component Flow
+
+```text
+Agent Service
+     |
+     v
+ObservedLLMProvider
+     |
+     +------> Metrics Sink
+     |
+     +------> Event Sink
+     |
+     v
+RetryingLLMProvider
+     |
+     +------> Retry Telemetry Callback
+     |
+     v
+Concrete Provider
+     |
+     +------> OpenAI
+     |
+     +------> NVIDIA
 ```
+
+## 4. Trust Boundaries
+
+Telemetry is treated as a separate data flow.
+
+Sensitive request and response content must not cross into telemetry sinks.
+
+## 5. Future Extensions
+
+The metrics and event interfaces may later be implemented using:
+
+- OpenTelemetry
+- Prometheus
+- Grafana
+- Centralized structured logging
 
 ---
 

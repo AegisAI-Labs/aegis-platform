@@ -3,11 +3,11 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
-**Last Updated:** 2026-10-18
+**Last Updated:** 2026-11-02
 
 ## Related Artifacts
 
@@ -15,6 +15,8 @@
 - RFC-001: Platform Foundation
 - RFC-002: FastAPI Foundation
 - RFC-006: Multi-Provider Support
+- RFC-007: LLM Provider Reliability
+- RFC-008: LLM Provider Observability and Monitoring
 - ADR-001: Adopt FastAPI
 - ADR-006: NVIDIA Default with OpenAI Alternative
 - C4: AEGIS-C4-001
@@ -31,6 +33,7 @@
 | 1.2 | 2026-09-29 | Added Agent Orchestration requirements, streaming responses, tool execution, and state management. |
 | 1.3 | 2026-09-30 | Added LLM provider abstraction requirements for multi-provider support, synchronous and streaming invocation, model configuration, timeouts, and error normalization. |
 | 1.5 | 2026-10-18 | Clarified configurable NVIDIA/OpenAI selection, shared generation and streaming contracts, normalized errors, usage metadata, and RFC-006 traceability. |
+| 1.6 | 2026-11-02 | LLM Observability and Monitoring. |
 
 ---
 
@@ -259,6 +262,33 @@ Related artifacts: RFC-006, ADR-006, C4-001, EDI-001.
 
 ---
 
+## FR-012 - LLM Observability
+- **OBS-FR-001** — Request Count
+   - The platform shall record one logical request count for each generation or streaming operation.
+
+- **OBS-FR-002** — Failure Count
+   - The platform shall record failed logical LLM operations.
+
+- **OBS-FR-003** — Request Duration
+   - The platform shall measure end-to-end LLM request duration, including retry delays.
+
+- **OBS-FR-004** — Streaming TTFT
+   - The platform shall measure time to first non-empty streaming chunk.
+
+- **OBS-FR-005** — Stream Interruption
+   - The platform shall record interrupted streams, including failures after partial output.
+
+- **OBS-FR-006** — Token Usage
+   - The platform shall record input and output token usage when returned by the provider.
+
+- **OBS-FR-007** — Retry Telemetry
+   - The retry mechanism shall expose a callback for each scheduled retry.
+
+- **OBS-FR-008** — Structured Events
+   - The platform shall emit structured events for successful requests, failures, retries, and stream interruptions.
+
+---
+
 # 4. Non-Functional Requirements
 
 ## NFR-001 — Performance
@@ -331,12 +361,34 @@ Requirements
 
 ---
 
-## NFR - Provider Reliability
+## NFR-006 - Provider Reliability
 - **NFR-LLM-REL-001:** Bound latency with a configurable deadline.
 - **NFR-LLM-REL-002:** Keep policy provider-neutral.
 - **NFR-LLM-REL-003:** Make behavior testable using fake providers and injected timing.
 - **NFR-LLM-REL-004:** Keep retry logic at one composition boundary.
 - **NFR-LLM-REL-005:** Keep credentials and full prompts out of logs.
+
+---
+
+## NFR-007 - LLM Observability
+
+- **OBS-NFR-001** — Provider Independence
+   - The observability implementation shall not depend on OpenAI or NVIDIA SDK types.
+
+- **OBS-NFR-002** — Privacy
+   - Prompts, completions, API keys, user IDs, and raw exception messages shall not be emitted.
+
+- **OBS-NFR-003** — Bounded Cardinality
+   - Metric labels shall be restricted to bounded dimensions such as provider and model.
+
+- **OBS-NFR-004** — Failure Isolation
+   - Telemetry sink failures shall not affect LLM request execution.
+
+- **OBS-NFR-005** — Cancellation
+   - Async cancellation shall propagate correctly.
+
+- **OBS-NFR-006** — Testability
+   - Metrics and event sinks shall be replaceable with in-memory implementations for unit testing.
 
 ---
 
@@ -456,6 +508,28 @@ Future SRS revisions will add requirements for:
 
 # 11. Verification
 Test success, recovery, exhaustion, permanent failures, deadline, cancellation, and stream failure before/after first chunk. Run NVIDIA/OpenAI contract tests without requiring live credentials.
+
+---
+
+# 12. Validation
+
+Automated tests shall verify:
+
+Successful generation.
+
+Failed generation.
+
+Successful streaming.
+
+Streaming TTFT.
+
+Stream interruption after partial output.
+
+Token usage recording.
+
+Privacy-safe event attributes.
+
+Observability sink failure isolation.
 
 ---
 
