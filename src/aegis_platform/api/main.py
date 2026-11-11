@@ -14,11 +14,44 @@ from aegis_platform.llm.errors import (
 )
 from aegis_platform.llm.factory import LLMProviderFactory
 from aegis_platform.llm.reliability import RetryingLLMProvider, RetryPolicy
+from aegis_platform.observability import (
+    InMemoryEventSink,
+    InMemoryMetricsSink,
+    ObservedLLMProvider,
+)
+from aegis_platform.observability.retry_telemetry import (
+    RetryTelemetry,
+)
 
 app = FastAPI(title="Aegis AI Platform")
 
 llm_provider = LLMProviderFactory.create_llm_provider(settings)
 
+provider_name = getattr(
+    llm_provider,
+    "provider_name",
+    "unknown",
+)
+
+model_name = (
+    settings.nvidia_model
+    if settings.llm_provider.strip().lower() == "nvidia"
+    else settings.llm_model
+)
+
+# Observability sinks
+metrics = InMemoryMetricsSink()
+events = InMemoryEventSink()
+
+# Retry telemetry
+retry_telemetry = RetryTelemetry(
+    metrics=metrics,
+    events=events,
+    provider=provider_name,
+    model=model_name,
+)
+
+# Configure a retry policy for the LLM provider
 retrying_llm_provider = RetryingLLMProvider(
     llm_provider,
     policy=RetryPolicy(
@@ -33,10 +66,19 @@ retrying_llm_provider = RetryingLLMProvider(
         ProviderTimeout,
         ProviderUnavailable,
     ),
+    on_retry=retry_telemetry,
 )
 
+# Observed LLM provider wraps the retrying provider with observability features
+observed_provider = ObservedLLMProvider(
+    provider=retrying_llm_provider,
+    metrics=metrics,
+    events=events,
+)
+
+# Agent service uses the observed LLM provider, which wraps the retrying provider with observability features, for handling requests with retries
 agent_service = AgentService(
-    llm_provider=retrying_llm_provider,
+    llm_provider=observed_provider,
 )
 
 

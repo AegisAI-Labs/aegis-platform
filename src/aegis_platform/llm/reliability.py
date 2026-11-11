@@ -16,6 +16,11 @@ from aegis_platform.llm.models import LLMRequest, LLMResponse
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
+RetryCallback = Callable[
+    [int, float, Exception],
+    None,
+]
+
 
 @dataclass(frozen=True, slots=True)
 class RetryPolicy:
@@ -47,12 +52,14 @@ class RetryingLLMProvider:
         retryable_exceptions: tuple[type[Exception], ...] = (TimeoutError,),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         random_value: Callable[[], float] = random.random,
+        on_retry: RetryCallback | None = None,
     ) -> None:
         self._provider = provider
         self._policy = policy or RetryPolicy()
         self._retryable = tuple(dict.fromkeys((*retryable_exceptions, TimeoutError)))
         self._sleep = sleep
         self._random_value = random_value
+        self._on_retry = on_retry
 
     @property
     def provider_name(self) -> str:
@@ -79,6 +86,24 @@ class RetryingLLMProvider:
         if remaining <= 0:
             raise TimeoutError("LLM request deadline exceeded")
         await self._sleep(min(delay, remaining))
+
+    def _notify_retry(
+        self,
+        attempt: int,
+        delay_seconds: float,
+        exc: Exception,
+    ) -> None:
+        if self._on_retry is None:
+            return
+
+        try:
+            self._on_retry(
+                attempt,
+                delay_seconds,
+                exc,
+            )
+        except Exception:
+            logger.warning("Retry telemetry callback failed")
 
     async def _generate_with_retries(self, request: LLMRequest) -> LLMResponse:
         deadline = time.monotonic() + self._policy.timeout_seconds
@@ -117,6 +142,7 @@ class RetryingLLMProvider:
                         "delay_seconds": round(delay, 4),
                     },
                 )
+                self._notify_retry(attempt, delay, exc)
                 await self._wait(delay, deadline)
 
         if last_error:

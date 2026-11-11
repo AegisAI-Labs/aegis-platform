@@ -24,6 +24,8 @@ from ..models import LLMRequest, LLMResponse, LLMUsage
 class NvidiaProvider(LLMProvider):
     """Nvidia LLM provider implementation."""
 
+    provider_name = "nvidia"
+
     DEFAULT_BASE_URL = (
         "https://integrate.api.nvidia.com/v1"  # Example default base URL for Nvidia API
     )
@@ -69,7 +71,7 @@ class NvidiaProvider(LLMProvider):
         return LLMResponse(
             content=choice.message.content or "",
             model=response.model,
-            provider="nvidia",
+            provider=NvidiaProvider.provider_name,
             usage=usage,
         )
 
