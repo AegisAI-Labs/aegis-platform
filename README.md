@@ -140,6 +140,103 @@ Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for the API
 documentation, or check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 to verify the service is running.
 
+### Pre-commit Hooks
+
+This repository uses `pre-commit` hooks to automatically check code quality and
+consistency before each commit. Hooks are configured in `.pre-commit-config.yaml`
+and run automatically when you commit.
+
+#### Install Pre-commit Hooks
+
+After cloning or setting up the project, install the pre-commit hooks:
+
+```powershell
+# Ensure pre-commit is installed (already in dev dependencies)
+uv sync
+
+# Install the git hooks
+pre-commit install
+```
+
+You should see output like:
+```
+pre-commit installed at .git/hooks/pre-commit
+```
+
+After installation, hooks run automatically on every `git commit`. If any hook
+fails, your commit is rejected and you can fix the issues and try again.
+
+#### What Hooks Run
+
+The following hooks run automatically on each commit:
+
+| Hook | Purpose |
+|------|---------|
+| `trailing-whitespace` | Removes trailing whitespace from files |
+| `end-of-file-fixer` | Ensures files end with a single newline |
+| `check-yaml` | Validates YAML file syntax |
+| `check-json` | Validates JSON file syntax |
+| `check-added-large-files` | Prevents committing files larger than 5MB |
+| `ruff` | Lints Python code and auto-fixes issues |
+| `ruff-format` | Auto-formats Python code for consistency |
+
+#### Run Hooks Manually
+
+To run all hooks on all files without committing:
+
+```powershell
+pre-commit run --all-files
+```
+
+To run hooks on only staged files:
+
+```powershell
+pre-commit run
+```
+
+#### Bypass Hooks (When Necessary)
+
+If you need to bypass hooks temporarily (not recommended), use `--no-verify`:
+
+```powershell
+git commit --no-verify -m "Your commit message"
+```
+
+> **Note:** Only use `--no-verify` in exceptional cases. Hooks exist to maintain
+> code quality and consistency.
+
+#### Troubleshooting
+
+**Problem:** `` `pre-commit` not found. Did you forget to activate your virtualenv? ``
+
+**Solution:** The pre-commit hook can't find the Python interpreter. This usually
+happens if:
+1. Dependencies weren't installed: Run `uv sync`
+2. The hook was installed in a different environment: Run `pre-commit install` again
+
+If issues persist, regenerate the hooks:
+
+```powershell
+pre-commit clean
+pre-commit install
+```
+
+**Problem:** Hooks modify files that I didn't intend to change
+
+**Solution:** This is expected behavior. Hooks like `ruff-format` and
+`trailing-whitespace` auto-fix issues. Review the changes and re-stage if needed:
+
+```powershell
+# Review the changes
+git diff
+
+# Re-stage the fixed files
+git add .
+
+# Try committing again
+git commit -m "Your commit message"
+```
+
 ### Run with Docker
 
 Make sure Docker Desktop is running. From the repository root, build the image
