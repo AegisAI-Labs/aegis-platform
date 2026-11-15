@@ -55,11 +55,12 @@ class ObservedLLMProvider:
                     },
                 )
             )
-        except Exception:
+        except Exception as sink_error:
             # Telemetry must never break an LLM request.
             logger.warning(
                 "Metrics sink failed while recording %s",
                 name,
+                exc_info=sink_error,
             )
 
     def _emit_event(
@@ -74,10 +75,11 @@ class ObservedLLMProvider:
                     attributes=attributes,
                 )
             )
-        except Exception:
+        except Exception as sink_error:
             logger.warning(
                 "Event sink failed while emitting %s",
                 name,
+                exc_info=sink_error,
             )
 
     async def generate(self, request: Any) -> Any:

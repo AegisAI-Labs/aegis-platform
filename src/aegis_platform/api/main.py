@@ -8,6 +8,7 @@ from aegis_platform.api.models import AgentRequest, AgentResponse
 from aegis_platform.config.settings import settings
 from aegis_platform.llm.errors import (
     ProviderAuthenticationError,
+    ProviderQuotaExhausted,
     ProviderRateLimited,
     ProviderTimeout,
     ProviderUnavailable,
@@ -97,6 +98,18 @@ def liveness():
     return {"status": "live"}
 
 
+@app.get("/observability/metrics", tags=["Observability"])
+def get_metrics():
+    """Get all recorded metrics."""
+    return {"metrics": metrics.snapshot()}
+
+
+@app.get("/observability/events", tags=["Observability"])
+def get_events():
+    """Get all recorded events."""
+    return {"events": [{"name": e.name, "attributes": e.attributes} for e in events.snapshot()]}
+
+
 @app.post("/agent/run", response_model=AgentResponse, tags=["Agent"])
 async def run_agent(request: AgentRequest):
     result = await agent_service.run(request.message)
@@ -121,6 +134,11 @@ async def stream_agent(request: AgentRequest):
 
             yield sse_event("done", {"status": "completed"})
 
+        except ProviderQuotaExhausted:
+            yield sse_event(
+                "error",
+                {"message": "Provider quota exhausted. Please add credits or switch providers."},
+            )
         except (
             ProviderAuthenticationError,
             ProviderRateLimited,

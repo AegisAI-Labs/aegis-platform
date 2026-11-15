@@ -13,6 +13,7 @@ from openai import (
 
 from aegis_platform.llm.errors import (
     ProviderAuthenticationError,
+    ProviderQuotaExhausted,
     ProviderRateLimited,
     ProviderRequestError,
     ProviderTimeout,
@@ -139,3 +140,21 @@ async def test_openai_stream_maps_timeout() -> None:
             _ = [chunk async for chunk in provider.stream(request)]
 
     assert raised.value.__cause__ is timeout
+
+
+@pytest.mark.asyncio
+async def test_openai_generate_maps_quota_exhaustion() -> None:
+    """Test that credit exhaustion is mapped to ProviderQuotaExhausted, not ProviderRateLimited."""
+    provider = OpenAIProvider(api_key="test-key", model="default-model")
+    request = LLMRequest(messages=[LLMMessage(role="user", content="Hi")])
+    quota_error = RateLimitError(
+        "Error code: 429 - {'error': {'message': 'You have no credits remaining', 'code': 'credit_balance_exhausted'}}",
+        response=Response(429, request=Request("POST", "https://example.test/chat/completions")),
+        body=None,
+    )
+    with patch.object(provider.client.chat.completions, "create", new_callable=AsyncMock) as create:
+        create.side_effect = quota_error
+        with pytest.raises(ProviderQuotaExhausted) as raised:
+            await provider.generate(request)
+
+    assert raised.value.__cause__ is quota_error

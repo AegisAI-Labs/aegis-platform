@@ -14,6 +14,10 @@ class ProviderRateLimited(LLMProviderError):
     """Provider rejected the request due to rate limiting."""
 
 
+class ProviderQuotaExhausted(LLMProviderError):
+    """Provider quota (credits/tokens) is exhausted."""
+
+
 class ProviderAuthenticationError(LLMProviderError):
     """Provider authentication failed."""
 

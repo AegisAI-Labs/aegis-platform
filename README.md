@@ -126,7 +126,14 @@ NVIDIA_API_KEY=your-nvidia-api-key
 Do not commit `.env` or API keys. Start the API from the repository root:
 
 ```powershell
-uv run uvicorn aegis_platform.api.main:app --reload --host 127.0.0.1 --port 8000
+# Activate the virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Set PYTHONPATH to locate the aegis_platform module
+$env:PYTHONPATH="src"
+
+# Start the API server
+python -m uvicorn aegis_platform.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for the API

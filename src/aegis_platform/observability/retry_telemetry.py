@@ -56,5 +56,5 @@ class RetryTelemetry:
                 )
             )
 
-        except Exception:
-            logger.warning("Unable to record retry telemetry")
+        except Exception as telemetry_error:
+            logger.warning("Unable to record retry telemetry", exc_info=telemetry_error)

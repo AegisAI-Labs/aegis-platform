@@ -13,6 +13,7 @@ from openai import (
 
 from aegis_platform.llm.errors import (
     ProviderAuthenticationError,
+    ProviderQuotaExhausted,
     ProviderRateLimited,
     ProviderRequestError,
     ProviderTimeout,
@@ -129,3 +130,21 @@ async def test_nvidia_generate_maps_sdk_errors(
             await provider.generate(llm_request)
 
     assert raised.value.__cause__ is sdk_errors[failure]
+
+
+@pytest.mark.asyncio
+async def test_nvidia_generate_maps_quota_exhaustion() -> None:
+    """Test that quota exhaustion is mapped to ProviderQuotaExhausted, not ProviderRateLimited."""
+    provider = NvidiaProvider(api_key="test-key", model="default-model", timeout_seconds=10)
+    request = LLMRequest(messages=[LLMMessage(role="user", content="Hi")])
+    quota_error = RateLimitError(
+        "Error code: 429 - {'error': {'message': 'Quota exceeded', 'code': 'quota_exceeded'}}",
+        response=Response(429, request=Request("POST", "https://example.test/chat/completions")),
+        body=None,
+    )
+    with patch.object(provider.client.chat.completions, "create", new_callable=AsyncMock) as create:
+        create.side_effect = quota_error
+        with pytest.raises(ProviderQuotaExhausted) as raised:
+            await provider.generate(request)
+
+    assert raised.value.__cause__ is quota_error

@@ -13,6 +13,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from ..base import LLMProvider
 from ..errors import (
     ProviderAuthenticationError,
+    ProviderQuotaExhausted,
     ProviderRateLimited,
     ProviderRequestError,
     ProviderTimeout,
@@ -127,6 +128,10 @@ class NvidiaProvider(LLMProvider):
             return ProviderAuthenticationError("NVIDIA authentication failed.")
 
         if isinstance(exc, RateLimitError):
+            # Differentiate between rate limiting and quota exhaustion
+            error_msg = str(exc)
+            if "insufficient_quota" in error_msg or "quota" in error_msg.lower():
+                return ProviderQuotaExhausted("NVIDIA quota exhausted.")
             return ProviderRateLimited("NVIDIA rate limit exceeded.")
 
         if isinstance(exc, APITimeoutError):

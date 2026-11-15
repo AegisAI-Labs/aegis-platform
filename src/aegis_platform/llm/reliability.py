@@ -102,8 +102,8 @@ class RetryingLLMProvider:
                 delay_seconds,
                 exc,
             )
-        except Exception:
-            logger.warning("Retry telemetry callback failed")
+        except Exception as callback_error:
+            logger.warning("Retry telemetry callback failed", exc_info=callback_error)
 
     async def _generate_with_retries(self, request: LLMRequest) -> LLMResponse:
         deadline = time.monotonic() + self._policy.timeout_seconds
