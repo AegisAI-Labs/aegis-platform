@@ -46,4 +46,3 @@ def test_observability_endpoints_empty_initially(client: TestClient) -> None:
     events_response = client.get("/observability/events")
     assert events_response.status_code == 200
     assert events_response.json()["events"] == []
-

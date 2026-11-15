@@ -118,7 +118,7 @@ async def run_agent(request: AgentRequest):
 
 # Server-Sent Events (SSE) helper function
 def sse_event(event: str, data: dict[str, str]) -> str:
-    return f"event: {event}\n" f"data: {json.dumps(data)}\n\n"
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 @app.post("/agent/stream")

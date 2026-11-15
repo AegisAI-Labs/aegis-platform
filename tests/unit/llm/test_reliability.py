@@ -25,6 +25,7 @@ class SuccessfulProvider:
         async def _stream() -> AsyncIterator[str]:
             self.call_count += 1
             yield "streaming"
+
         return _stream()
 
 
@@ -46,6 +47,7 @@ class FlakyGenerateProvider:
             if False:
                 yield  # Unreachable, but makes this an async generator
             raise NotImplementedError
+
         return _stream()
 
 
@@ -64,6 +66,7 @@ class NonRetryableFailingProvider:
             if False:
                 yield  # Unreachable, but makes this an async generator
             raise ValueError("non-retryable error")
+
         return _stream()
 
 
@@ -82,6 +85,7 @@ class AlwaysFailingProvider:
             if False:
                 yield  # Unreachable, but makes this an async generator
             raise TimeoutError("persistent failure")
+
         return _stream()
 
 
@@ -96,6 +100,7 @@ class CancellingProvider:
             if False:
                 yield  # Unreachable, but makes this an async generator
             raise asyncio.CancelledError()
+
         return _stream()
 
 
@@ -126,6 +131,7 @@ class FlakyStreamProvider:
                 yield f"chunk-{self.stream_calls}-{chunk_count}"
             if self.fail_after_chunk:
                 raise TimeoutError("failure after chunks")
+
         return _stream()
 
 
@@ -149,6 +155,7 @@ class CustomExceptionProvider:
             if False:
                 yield  # Unreachable, but makes this an async generator
             raise NotImplementedError
+
         return _stream()
 
 
@@ -317,9 +324,7 @@ async def test_generate_notifies_callback_before_retry() -> None:
             max_delay_seconds=0.0,
         ),
         sleep=lambda _: _no_sleep(),
-        on_retry=lambda attempt, delay, error: retry_events.append(
-            (attempt, delay, error)
-        ),
+        on_retry=lambda attempt, delay, error: retry_events.append((attempt, delay, error)),
     )
     request = _make_request()
 
@@ -371,23 +376,24 @@ async def test_generate_with_custom_exception_not_retried() -> None:
 @pytest.mark.asyncio
 async def test_generate_with_extremely_short_timeout() -> None:
     """Generate should timeout if provider takes too long."""
-    
+
     class SlowProvider:
         def __init__(self):
             self.generate_calls = 0
-        
+
         async def generate(self, request: LLMRequest) -> LLMResponse:
             self.generate_calls += 1
             await asyncio.sleep(1.0)  # Sleep longer than timeout
             return LLMResponse(content="too late", model="test", provider="test")
-        
+
         def stream(self, request: LLMRequest) -> AsyncIterator[str]:
             async def _stream() -> AsyncIterator[str]:
                 if False:
                     yield  # Unreachable, but makes this an async generator
                 raise NotImplementedError
+
             return _stream()
-    
+
     provider = SlowProvider()
     retrying = _make_retrying_provider(provider, timeout_seconds=0.001)
     request = _make_request()
@@ -539,22 +545,23 @@ async def test_stream_does_not_retry_after_yielding_output() -> None:
 @pytest.mark.asyncio
 async def test_stream_exhausts_retries_before_yield() -> None:
     """Stream should raise after retries exhausted if no output yielded."""
-    
+
     class AlwaysFailBeforeYield:
         def __init__(self):
             self.stream_calls = 0
-        
+
         async def generate(self, request: LLMRequest) -> LLMResponse:
             raise NotImplementedError
-        
+
         def stream(self, request: LLMRequest) -> AsyncIterator[str]:
             async def _stream() -> AsyncIterator[str]:
                 if False:
                     yield  # Unreachable, but makes this an async generator
                 self.stream_calls += 1
                 raise TimeoutError("failure before yield")
+
             return _stream()
-    
+
     provider = AlwaysFailBeforeYield()
     retrying = _make_retrying_provider(provider, max_attempts=2)
     request = _make_request()
