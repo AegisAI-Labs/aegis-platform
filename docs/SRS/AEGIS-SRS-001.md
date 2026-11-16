@@ -3,11 +3,11 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
-**Last Updated:** 2026-11-02
+**Last Updated:** 2026-11-15
 
 ## Related Artifacts
 
@@ -17,8 +17,10 @@
 - RFC-006: Multi-Provider Support
 - RFC-007: LLM Provider Reliability
 - RFC-008: LLM Provider Observability and Monitoring
+- RFC-009: RAG Architecture
 - ADR-001: Adopt FastAPI
 - ADR-006: NVIDIA Default with OpenAI Alternative
+- ADR-009: RAG Chunking Foundation
 - C4: AEGIS-C4-001
 - EDI: AEGIS-EDI-001
 
@@ -34,6 +36,7 @@
 | 1.3 | 2026-09-30 | Added LLM provider abstraction requirements for multi-provider support, synchronous and streaming invocation, model configuration, timeouts, and error normalization. |
 | 1.5 | 2026-10-18 | Clarified configurable NVIDIA/OpenAI selection, shared generation and streaming contracts, normalized errors, usage metadata, and RFC-006 traceability. |
 | 1.6 | 2026-11-02 | LLM Observability and Monitoring. |
+| 1.7 | 2026-11-15 | RAG Foundation: added FR-013 (chunking, storage abstractions, factory pattern) and NFR-008 (provider independence, extensibility, configuration-driven behavior). |
 
 ---
 
@@ -289,6 +292,54 @@ Related artifacts: RFC-006, ADR-006, C4-001, EDI-001.
 
 ---
 
+## FR-013 - RAG Foundation (Chunking & Storage Abstractions)
+
+The platform shall support Retrieval-Augmented Generation with provider-agnostic abstractions for text processing and vector storage.
+
+### FR-RAG-001 — Text Chunking
+- The platform shall support multiple text chunking strategies (recursive character-based, markdown-aware).
+- Chunking shall be configurable via `ChunkingConfig` with strategy name, chunk size, overlap, and size limits.
+- Each chunk shall track position in original document, sequence number, and metadata (strategy, document_id).
+- The platform shall support at least 2 LangChain-based chunking strategies: recursive and markdown.
+
+### FR-RAG-002 — Chunking Configuration
+- Chunking strategy shall be selectable at runtime via configuration without code changes.
+- Configuration parameters: strategy name, chunk_size (target), overlap (between chunks), min_chunk_size, max_chunk_size.
+- Configuration shall be immutable after chunker instantiation; updates require re-instantiation.
+
+### FR-RAG-003 — Embedding Provider Abstraction
+- The platform shall define an `EmbeddingProvider` protocol supporting provider-neutral embedding generation.
+- Embedding providers shall not be locked to specific vendor SDKs in the core RAG module.
+- Support for future implementations: OpenAI, Claude, local embeddings without modifying existing code.
+
+### FR-RAG-004 — Vector Storage Abstraction
+- The platform shall define a `VectorStore` protocol supporting provider-neutral vector search.
+- Vector storage shall support query, insert, update, and delete operations.
+- Vector stores shall not be locked to specific vendors in the core RAG module.
+- Support for future implementations: Qdrant, Weaviate, Pinecone without modifying existing code.
+
+### FR-RAG-005 — Factory Pattern & Dependency Injection
+- The platform shall provide a factory function `create_chunker(config)` for instantiating chunking strategies.
+- Strategy registry shall map configuration names to strategy classes.
+- Available strategies shall be discoverable via `get_available_strategies()`.
+
+### FR-RAG-006 — Document Models
+- The platform shall define data models for: Document, Chunk, EmbeddingRequest, EmbeddingResponse, SearchResult.
+- Chunk model shall include: text, chunk_id, sequence, start_pos, end_pos, metadata.
+- Document model shall include: doc_id, content, metadata, source.
+
+Acceptance Criteria:
+
+- LangChain-based recursive and markdown chunkers are implemented and tested.
+- Abstract protocols (EmbeddingProvider, VectorStore) are defined but not implemented.
+- Factory function correctly instantiates chunkers based on configuration.
+- All 24 unit tests pass covering chunking, configuration, factory, and integration scenarios.
+- Type checking passes (mypy).
+- Linting passes (ruff).
+- Module documentation (README.md) provides architecture overview and usage examples.
+
+---
+
 # 4. Non-Functional Requirements
 
 ## NFR-001 — Performance
@@ -392,6 +443,29 @@ Requirements
 
 ---
 
+## NFR-008 - RAG Provider Independence
+
+- **RAG-NFR-001** — Embedding Provider Neutrality
+   - The RAG module shall not depend on specific embedding provider SDKs in the core protocol definitions.
+   - Embedding providers shall be selectable at runtime via configuration.
+
+- **RAG-NFR-002** — Vector Store Neutrality
+   - The RAG module shall not depend on specific vector store SDKs in the core protocol definitions.
+   - Vector stores shall be selectable at runtime via configuration.
+
+- **RAG-NFR-003** — Extensibility
+   - The protocol-based architecture shall allow new chunking strategies, embedding providers, and vector stores to be added without modifying the core module.
+
+- **RAG-NFR-004** — Configuration-Driven Behavior
+   - Chunking strategy, chunk size, overlap, and size limits shall be configurable without code changes.
+   - Configuration parameters shall be validated at instantiation time.
+
+- **RAG-NFR-005** — Immutable Configuration After Instantiation
+   - Chunker configuration shall be immutable after instantiation to prevent inconsistent state.
+   - Configuration updates shall require re-instantiation of the chunker.
+
+---
+
 # 5. Interface Requirements
 
 ## REST API
@@ -467,6 +541,7 @@ Future deployment targets
 | Python Foundation | RFC-002 | ADR-001 |
 | Multi-provider selection, common generation/streaming, normalized errors, and usage metadata | RFC-006 | ADR-006 |
 | LLM streaming reliability | RFC-005 | ADR-005 |
+| RAG Chunking Foundation | FR-RAG-001 to FR-RAG-006, NFR-RAG-001 to NFR-RAG-005 | RFC-009 | ADR-009 |
 
 ---
 

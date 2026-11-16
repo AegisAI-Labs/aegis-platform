@@ -52,6 +52,7 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | 1.2 | 2026-09-29 | Added Agent Orchestration Foundation (RFC-003, ADR-003, EPIC-003). |
 | 1.3 | 2026-09-30 | Added LLM Provider Abstraction (RFC-004, ADR-004, EPIC-004). |
 | 1.5 | 2026-10-18 | Added Day 6 multi-provider traceability from RFC-006 through ADR, implementation, tests, and experiments. |
+| 1.7 | 2026-11-15 | Added RAG Foundation traceability (SRS-009, ADR-009, implementation, tests, documentation). |
 
 ---
 
@@ -65,7 +66,7 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | Multi-Provider LLM Support | Accepted | Kader Beevi | ADR-006; RFC-006 implementation and validation evidence |
 | Tool Registry Architecture | Accepted | RFC | Kader Beevi |
 | Streaming Agent Responses | Accepted | RFC | Kader Beevi |
-| RAG Architecture | Planned | RFC | Kader Beevi |
+| RAG Chunking Foundation | **Accepted** | **ADR-009** | **Kader Beevi** |
 | Kafka Event Streaming | Planned | RFC | Kader Beevi |
 | Evaluation Framework | Planned | RFC | Kader Beevi |
 | Multi-Agent Collaboration | Planned | RFC | Kader Beevi |
@@ -168,6 +169,57 @@ Primary decision and requirement sources: [RFC-006](../RFC/AEGIS-RFC-006-Multi-P
 | FR-LLM-REL-008 | Metadata-only logs | retry/failure events | logging review/tests |
 
 ---
+
+# Day 2 - RAG Chunking Foundation
+
+## Overview
+Implemented production-ready RAG foundation with LangChain-based chunking strategies and provider-agnostic abstractions.
+
+## Feature Traceability
+
+| Stage | Reference |
+|--------|-----------|
+| PRD | AEGIS-PRD-001 (mentions RAG) |
+| RFC | AEGIS-RFC-009 (RAG Architecture) |
+| SRS | AEGIS-SRS-001 (RAG Foundation section) |
+| C4 | AEGIS-C4-001 (to be updated) |
+| ADR | AEGIS-ADR-009 (RAG Chunking) |
+| Implementation | `src/aegis_platform/rag/` (5 modules) |
+| Tests | `tests/unit/rag/test_chunking.py` (24 tests) |
+| Documentation | `src/aegis_platform/rag/README.md` |
+| Planned Release | v0.3.0 |
+
+## Acceptance Criteria Status
+
+| Criterion | Status | Details |
+|-----------|--------|---------|
+| Chunking strategies implemented | ✅ Complete | 2 LangChain strategies (recursive, markdown) |
+| Abstract protocols defined | ✅ Complete | EmbeddingProvider, VectorStore |
+| Factory pattern working | ✅ Complete | Configuration-driven instantiation |
+| Unit tests | ✅ Complete | 24 tests, all passing |
+| Type checking | ✅ Complete | mypy clean, no issues |
+| Linting | ✅ Complete | ruff clean, all checks passed |
+| Documentation | ✅ Complete | README, SRS, ADR, inline docs |
+| Configuration support | ✅ Complete | ChunkingConfig with immutability |
+| Runtime updates | ✅ Complete | update_config() on all chunkers |
+| Metadata tracking | ✅ Complete | Chunk positions and strategy info |
+
+## Day 2 Implementation Summary
+
+| Component | Files | Status |
+|-----------|-------|--------|
+| Abstract Protocols | embeddings.py, storage.py | ✅ Complete |
+| Chunking Strategies | langchain_recursive.py, langchain_markdown.py | ✅ Complete |
+| Configuration | strategy.py (ChunkingConfig) | ✅ Complete |
+| Factory | factory.py (create_chunker) | ✅ Complete |
+| Data Models | models.py (Chunk, Document) | ✅ Complete |
+| Tests | test_chunking.py (24 tests) | ✅ Complete |
+| Documentation | README.md + inline docs | ✅ Complete |
+| Requirements | AEGIS-SRS-001 v1.7 (FR-013, NFR-008) | ✅ Complete |
+| Architecture | AEGIS-ADR-009 | ✅ Complete |
+
+---
+
 # Day 8 - Provider Observability
 
 | Requirement | Design Reference | Implementation |

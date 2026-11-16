@@ -4,10 +4,10 @@
 >Context - System Boundaries, Container - Application Building blocks.
 # C4 Architecture – Level 1 & Level 2  & Level 3 & Level 4
 
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-11-02
+**Last Updated:** 2026-11-15
 
 ## Related Artifacts
 
@@ -15,9 +15,11 @@
 - RFC-001: Platform Foundation
 - RFC-002: FastAPI Foundation
 - RFC-006: Multi-Provider Support
+- RFC-009: RAG Architecture
 - SRS: AEGIS-SRS-001
 - ADR: AEGIS-ADR-001
 - ADR: AEGIS-ADR-006
+- ADR: AEGIS-ADR-009 (RAG Chunking)
 - EDI: AEGIS-EDI-001
 
 ---
@@ -30,6 +32,7 @@
 | 1.1 | 2026-09-28 | Added FastAPI Gateway as the primary API entry point. |
 | 1.2 | 2026-09-29 | Added LangGraph orchestration layer. |
 | 1.5 | 2026-10-18 | Documented factory selection of NVIDIA or OpenAI adapters while preserving the agent execution path. |
+| 1.7 | 2026-11-15 | Added RAG Retriever container with LangChain-based chunking foundation. |
 
 ---
 
@@ -101,7 +104,7 @@ The platform is organized into independently deployable containers.
 |------------|---------------|
 | FastAPI Gateway | Entry point, validation, OpenAPI, health endpoints |
 | Agent Service | LangGraph orchestration |
-| Retriever | RAG retrieval (future) |
+| Retriever | RAG retrieval with LangChain-based text chunking (active - Phase 1) |
 | Evaluation | AI evaluation (future) |
 | PostgreSQL | Metadata storage (future) |
 | Qdrant | Vector search (future) |
@@ -197,8 +200,9 @@ The current implementation includes:
 - AgentService and LangGraph execution path
 - Provider-neutral LLM interface and provider factory
 - NVIDIA adapter as the default provider and OpenAI as an alternative
-- Configuration-driven models, timeouts, and provider credentials.
+- Configuration-driven models, timeouts, and provider credentials
 - Provider Reliability Wrapper
+- **RAG Retriever container (Phase 1):** Chunking strategies with LangChain-based implementation, abstract protocols for EmbeddingProvider and VectorStore, configuration-driven dependency injection
 
 Other future containers remain planned until their respective RFCs are implemented.
 
@@ -224,8 +228,10 @@ These principles are defined in `docs/ARCHITECTURE/PRINCIPLES.md`.
 |----------|---------|
 | RFC-002 | FastAPI proposal |
 | RFC-006 | Multi-provider requirements and acceptance criteria |
+| RFC-009 | RAG architecture proposal |
 | ADR-001 | FastAPI decision |
 | ADR-006 | NVIDIA default and OpenAI alternative decision |
-| SRS-001 | Software requirements |
+| ADR-009 | RAG chunking strategy decision |
+| SRS-001 | Software requirements (includes RAG foundation section) |
 | EDI-001 | Decision and multi-provider evidence traceability |
 | EPIC-002 | Implementation |
