@@ -37,6 +37,7 @@
 | 1.5 | 2026-10-18 | Clarified configurable NVIDIA/OpenAI selection, shared generation and streaming contracts, normalized errors, usage metadata, and RFC-006 traceability. |
 | 1.6 | 2026-11-02 | LLM Observability and Monitoring. |
 | 1.7 | 2026-11-15 | RAG Foundation: added FR-013 (chunking, storage abstractions, factory pattern) and NFR-008 (provider independence, extensibility, configuration-driven behavior). |
+| 1.8 | 2026-11-15 | RAG Phase 2 Implementation: added FR-014 (OpenAI EmbeddingProvider), FR-015 (Qdrant VectorStore), FR-016 (Factory extension), and NFR-009 (implementation quality: type safety, testing, error handling). |
 
 ---
 
@@ -340,6 +341,103 @@ Acceptance Criteria:
 
 ---
 
+## FR-014 - OpenAI EmbeddingProvider Implementation (Phase 2)
+
+The platform shall implement a production-ready OpenAI embedding provider.
+
+### FR-RAG-014-001 — OpenAI Embeddings
+- The platform shall support OpenAI text-embedding-3-small model (1536-dimensional vectors).
+- Configuration shall include API key (from environment), model, dimension, timeout, retries, and batch size.
+- The provider shall support async embedding of single texts and batches (up to 100 texts per request).
+- Auto-batching shall split larger inputs into multiple requests transparently.
+- Rate limit handling (HTTP 429) shall implement exponential backoff with jitter.
+
+### FR-RAG-014-002 — Error Handling
+- Authentication errors (401) shall fail immediately with clear error messages.
+- Connection errors shall retry according to max_retries configuration.
+- Timeout errors shall fail gracefully.
+- Empty or invalid input shall be handled without crashing.
+
+### FR-RAG-014-003 — Health Checks
+- The provider shall support health checks to verify OpenAI API connectivity.
+- Health check failures shall not block normal operations.
+
+Acceptance Criteria:
+
+- `OpenAIEmbedding` class fully implements `EmbeddingProvider` protocol.
+- 12 unit tests cover: configuration, single embedding, batch embedding, rate limiting, auth errors, timeouts, edge cases.
+- 2 integration tests cover: end-to-end chunk→embed→store, concurrent embeddings.
+- Type checking passes (mypy --strict).
+- Linting passes (ruff).
+- All tests mocked (no real OpenAI API calls in CI/CD).
+
+---
+
+## FR-015 - Qdrant VectorStore Implementation (Phase 2)
+
+The platform shall implement a production-ready Qdrant vector database backend.
+
+### FR-RAG-015-001 — Vector Store Operations
+- The platform shall support collection management (create, delete, list).
+- The platform shall support CRUD operations: insert vectors with metadata, search by similarity, delete by ID, update vectors and metadata.
+- Search shall support limiting results and score thresholds.
+- Collection statistics shall be available (vector count, dimension, distance metric).
+
+### FR-RAG-015-002 — Configuration
+- Configuration shall include URL (default: http://localhost:6333), optional API key, timeout, embedding dimension, and distance metric.
+- Distance metrics shall include cosine (default), euclidean, and dot product.
+
+### FR-RAG-015-003 — Error Handling
+- Missing collections shall fail with descriptive error messages.
+- Invalid vector dimensions shall be validated before operations.
+- Connection errors shall fail gracefully with clear messages.
+
+### FR-RAG-015-004 — Health Checks
+- The store shall support health checks to verify Qdrant connectivity.
+- Health check failures shall not block normal operations.
+
+Acceptance Criteria:
+
+- `QdrantVectorStore` class fully implements `VectorStore` protocol.
+- 12 unit tests cover: configuration, collection management, insert, search, delete, update, error handling, edge cases.
+- 2 integration tests cover: end-to-end create→insert→search, concurrent operations.
+- Type checking passes (mypy --strict).
+- Linting passes (ruff).
+- All tests mocked (no real Qdrant calls in CI/CD).
+
+---
+
+## FR-016 - Factory Extension for Embedding & Vector Store Providers (Phase 2)
+
+The platform shall extend the factory pattern to support embedding providers and vector stores.
+
+### FR-RAG-016-001 — Provider Registries
+- The platform shall maintain registries mapping provider names to implementation classes.
+- Registries shall be extensible for future providers without modifying existing code.
+
+### FR-RAG-016-002 — Factory Functions
+- `create_embedding_provider(config)` shall instantiate embedding providers based on configuration.
+- `create_vector_store(config)` shall instantiate vector stores based on configuration.
+- Both functions shall validate configuration and raise clear errors for unknown providers.
+
+### FR-RAG-016-003 — Provider Discovery
+- `get_available_embedding_providers()` shall return list of available provider names.
+- `get_available_vector_stores()` shall return list of available store names.
+
+### FR-RAG-016-004 — Configuration-Driven Selection
+- Providers shall be selectable via environment variables without code changes.
+- Default provider selections shall support sensible defaults.
+
+Acceptance Criteria:
+
+- Factory functions fully implemented and tested.
+- 6 unit tests cover: provider creation, validation, error handling, discovery.
+- 2 integration tests cover: environment variable configuration, end-to-end usage.
+- Type checking passes (mypy --strict).
+- Linting passes (ruff).
+
+---
+
 # 4. Non-Functional Requirements
 
 ## NFR-001 — Performance
@@ -463,6 +561,41 @@ Requirements
 - **RAG-NFR-005** — Immutable Configuration After Instantiation
    - Chunker configuration shall be immutable after instantiation to prevent inconsistent state.
    - Configuration updates shall require re-instantiation of the chunker.
+
+---
+
+## NFR-009 - RAG Embedding & Storage Implementation Quality (Phase 2)
+
+- **RAG-IMPL-NFR-001** — Type Safety
+   - All new code shall pass mypy --strict type checking.
+   - All parameters and return types shall be fully annotated.
+
+- **RAG-IMPL-NFR-002** — Code Quality
+   - All new code shall pass ruff linting with no violations.
+   - Code formatting shall be consistent with ruff format.
+   - Docstrings shall be present and complete for all public APIs.
+
+- **RAG-IMPL-NFR-003** — Test Coverage
+   - Implementation shall include 30+ unit and integration tests.
+   - Test coverage shall exceed 85% for all new code.
+   - All external API calls (OpenAI, Qdrant) shall be mocked in tests.
+
+- **RAG-IMPL-NFR-004** — Error Handling & Retry
+   - Rate limiting (HTTP 429) shall implement exponential backoff with jitter.
+   - Connection errors shall retry according to configuration.
+   - Authentication errors shall fail immediately without retry.
+   - All errors shall have descriptive messages for operators.
+
+- **RAG-IMPL-NFR-005** — Configuration & Secrets
+   - All secrets (API keys) shall come from environment variables.
+   - All configuration shall support sensible defaults.
+   - Configuration shall be validated at instantiation time.
+   - No hardcoded credentials shall appear in source code.
+
+- **RAG-IMPL-NFR-006** — Performance
+   - Embedding batch operations shall complete in <1 second for 100 vectors.
+   - Vector search in <1M vectors shall complete in <50ms (indexed).
+   - Metadata filtering shall not significantly impact search performance.
 
 ---
 

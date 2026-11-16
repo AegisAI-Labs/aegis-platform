@@ -3,10 +3,10 @@
 # Engineering Decision Index
 >This makes the project rather than a "documentation collection" to a "traceable engineering knowledge base"
 
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-11-02
+**Last Updated:** 2026-11-15
 
 Purpose: Provide complete traceability between product decisions, architecture decisions, implementation, testing, and documentation.
 
@@ -52,7 +52,8 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | 1.2 | 2026-09-29 | Added Agent Orchestration Foundation (RFC-003, ADR-003, EPIC-003). |
 | 1.3 | 2026-09-30 | Added LLM Provider Abstraction (RFC-004, ADR-004, EPIC-004). |
 | 1.5 | 2026-10-18 | Added Day 6 multi-provider traceability from RFC-006 through ADR, implementation, tests, and experiments. |
-| 1.7 | 2026-11-15 | Added RAG Foundation traceability (SRS-009, ADR-009, implementation, tests, documentation). |
+| 1.6 | 2026-11-02 | Added RAG Foundation traceability (SRS-009, ADR-009, implementation, tests, documentation). |
+| 1.7 | 2026-11-15 | Added Day 10 Phase 2 RAG EmbeddingProvider & VectorStore traceability (RFC-009 Phase 2, SRS-001 v1.8, FR-014/015/016, NFR-009, ADR-009 Phase 2, C4-001 v1.8). |
 
 ---
 
@@ -66,7 +67,7 @@ PRD → RFC → SRS → C4 → ADR → GitHub Issue → Commit → Pull Request 
 | Multi-Provider LLM Support | Accepted | Kader Beevi | ADR-006; RFC-006 implementation and validation evidence |
 | Tool Registry Architecture | Accepted | RFC | Kader Beevi |
 | Streaming Agent Responses | Accepted | RFC | Kader Beevi |
-| RAG Chunking Foundation | **Accepted** | **ADR-009** | **Kader Beevi** |
+| RAG Foundation: Chunking, EmbeddingProvider, VectorStore | **Accepted** | **ADR-009** | **Kader Beevi** |
 | Kafka Event Streaming | Planned | RFC | Kader Beevi |
 | Evaluation Framework | Planned | RFC | Kader Beevi |
 | Multi-Agent Collaboration | Planned | RFC | Kader Beevi |
@@ -250,6 +251,56 @@ Implemented production-ready RAG foundation with LangChain-based chunking strate
 | Retry Callback | Pending |
 | Tests | Pending |
 | CI Validation | Pending |
+## Day 10 - RAG Phase 2: Embedding & Vector Store Implementation
+
+## Overview
+Phase 2 of RAG foundation implementing OpenAI EmbeddingProvider and Qdrant VectorStore with factory pattern, configuration-driven behavior, and comprehensive testing.
+
+## Feature Traceability
+
+| Stage | Reference |
+|--------|-----------|
+| PRD | AEGIS-PRD-001 (mentions RAG) |
+| RFC | AEGIS-RFC-009 (Phase 2 sections 11.2-11.8) |
+| SRS | AEGIS-SRS-001 v1.8 (FR-014, FR-015, FR-016, NFR-009) |
+| C4 | AEGIS-C4-001 v1.8 (EmbedderService, VectorStoreService containers) |
+| ADR | AEGIS-ADR-009 (Phase 2 sections with embedding & vector store decisions) |
+| Implementation | `src/aegis_platform/rag/` (to be created) |
+| Tests | 30+ unit + integration tests |
+| Documentation | RFC-009, SRS-001 v1.8, ADR-009 Phase 2, module README |
+| Planned Release | v0.4.0 |
+
+## Acceptance Criteria Status
+
+| Criterion | Status | Details |
+|-----------|--------|---------|
+| OpenAI EmbeddingProvider implemented | 🔄 In Progress | text-embedding-3-small with batching |
+| Qdrant VectorStore implemented | 🔄 In Progress | Collection management + CRUD + search |
+| Factory pattern extended | 🔄 In Progress | EMBEDDING_PROVIDERS and VECTOR_STORES registries |
+| Configuration-driven instantiation | 🔄 In Progress | Environment variables + validation |
+| Unit tests (30+) | 🔄 Pending | OpenAI (12), Qdrant (12), Factory (6) |
+| Type checking (mypy --strict) | 🔄 Pending | All new code fully typed |
+| Linting (ruff) | 🔄 Pending | Code quality checks |
+| Documentation | 🔄 Pending | Docstrings, README, examples |
+| Retry & error handling | 🔄 Pending | Exponential backoff, error normalization |
+| Integration with Chunker | 🔄 Pending | End-to-end chunking → embedding → storage |
+
+## Day 10 Implementation Plan
+
+| Component | Files | Status |
+|-----------|-------|--------|
+| OpenAI EmbeddingProvider | embeddings_openai.py | 🔄 Pending |
+| Qdrant VectorStore | storage_qdrant.py | 🔄 Pending |
+| Factory Extension | provider_factory.py | 🔄 Pending (skeleton exists) |
+| Configuration | openai_config.py, qdrant_config.py | 🔄 Pending |
+| Tests | test_openai_provider.py, test_qdrant_store.py, test_factory.py | 🔄 Pending |
+| Dependencies | uv add openai qdrant-client | 🔄 Pending |
+| Documentation | README.md update + inline docs | 🔄 Pending |
+| RFC Phase 2 | AEGIS-RFC-009 sections 11.2-11.8 | ✅ Complete |
+| SRS Updates | FR-014, FR-015, FR-016, NFR-009 | ✅ Complete |
+| ADR-009 Phase 2 | Embedding & Vector Store decisions | ✅ Complete |
+| C4 Updates | EmbedderService, VectorStoreService containers | ✅ Complete |
+
 ---
 
 # Cross-Reference Matrix

@@ -42,12 +42,12 @@ The AEGIS platform requires:
 
 ## 3. Non-Goals
 
-- Implementing concrete embedding providers (future work)
-- Implementing concrete vector stores (future work)
 - Document loading and ingestion (future work)
 - RAG evaluation and retrieval quality metrics (future work)
 - Integration with agent service (future work)
 - Multi-language or non-text document support (future work)
+
+**Phase 2 Note:** Concrete embedding provider (OpenAI) and vector store (Qdrant) implementations are now IN SCOPE (Day 10), updated from "future work".
 
 ## 4. Proposed Architecture
 
@@ -59,15 +59,15 @@ Application Layer
     v
 RAG Service (query, insert, search)
     |
-    +---- EmbeddingProvider (protocol) ---- [Future: OpenAI, Claude, Local]
+    +---- EmbeddingProvider (protocol) ---- [Phase 2: OpenAI, Phase 3+: Claude, Local]
     |
-    +---- ChunkingStrategy (protocol) ---- [LangChain Recursive, Markdown]
+    +---- ChunkingStrategy (protocol) ---- [Phase 1: LangChain Recursive, Markdown]
     |
-    +---- VectorStore (protocol) -------- [Future: Qdrant, Weaviate, Pinecone]
+    +---- VectorStore (protocol) -------- [Phase 2: Qdrant, Phase 3+: Weaviate, Pinecone]
     |
     v
 Configuration
-    (Strategy selection, sizes, endpoints, credentials)
+    (Provider selection, credentials, endpoints, chunk settings)
 ```
 
 ### 4.2 Core Components
@@ -369,7 +369,121 @@ chunker = create_chunker(config)
 chunks = chunker.chunk(document_text, doc_id="doc_123")
 ```
 
-## 11. Roadmap
+## 11. Phase 2 Implementation: EmbeddingProvider & VectorStore Concrete Implementations
+
+### 11.1 OpenAI EmbeddingProvider
+
+**Architectural Role:**
+- Implements EmbeddingProvider protocol from Phase 1
+- Translates text sequences to dense vector representations
+- Supports single and batch operations for efficiency
+- Handles provider-specific concerns (authentication, rate limiting, retries)
+
+**Key Design Attributes:**
+- Configurable model selection and dimensionality via environment variables
+- Graceful handling of rate limits with exponential backoff
+- Input validation and graceful handling of edge cases
+- Observable health status for operational monitoring
+- Clear error messages for authentication and connectivity issues
+
+**Requirements:**
+- Support both synchronous and asynchronous API patterns
+- Provide batch operation capability with configurable batch size
+- Return vector dimension for downstream vector store configuration
+- Implement protocol contracts fully (no stub implementations)
+
+### 11.2 Qdrant VectorStore
+
+**Architectural Role:**
+- Implements VectorStore protocol from Phase 1
+- Manages distributed storage and retrieval of vector embeddings
+- Supports collection-based organization of vectors
+- Provides similarity search capabilities for RAG retrieval
+- Handles metadata-enriched storage for chunk context
+
+**Key Design Attributes:**
+- REST API-based connectivity for distributed deployment
+- Configurable distance metrics (cosine, euclidean, dot product)
+- Collection management (create, list, stats) for multi-document scenarios
+- Metadata support for preserving chunk context and filtering
+- Dimension validation to ensure embedding compatibility
+- Observable health status for operational monitoring
+
+**Requirements:**
+- Support CRUD operations (insert, search, delete, update) on vector collections
+- Provide batch insertion capability for performance
+- Enable similarity search with configurable result limits and thresholds
+- Support optional metadata filtering before similarity search
+- Implement protocol contracts fully (no stub implementations)
+
+### 11.3 Factory Pattern Extension
+
+**Architectural Role:**
+- Provides centralized instantiation of embedding providers and vector stores
+- Abstracts provider selection logic for runtime configuration
+- Validates configuration and instantiates appropriate implementations
+- Enables extensibility for future providers without modifying core code
+- Separates configuration concerns from implementation details
+
+**Key Design Attributes:**
+- Registry pattern for known providers (embedding and vector store)
+- Configuration-driven instantiation (no hardcoding of provider types)
+- Centralized validation and error handling
+- Discovery functions to list available provider options
+- Extensible design pattern for adding new providers
+
+**Requirements:**
+- Support configuration-driven provider selection from environment variables
+- Validate configuration before instantiation
+- Provide clear error messages for unknown providers or invalid configuration
+- Enable dynamic registration of new providers (for future extensibility)
+- Return fully initialized provider instances implementing established protocols
+
+### 11.4 End-to-End Data Flow
+
+**Document Ingestion Pipeline:**
+```
+Document Text
+    ↓
+ChunkingService.chunk() [Phase 1]
+    ↓ List[Chunk]
+EmbeddingProvider.embed_batch() [Phase 2 - NEW]
+    ↓ List[Vector] (1536 dims each)
+VectorStore.insert() [Phase 2 - NEW]
+    ↓
+Indexed in Qdrant
+    ↓
+Searchable via semantic similarity
+```
+
+**Query Execution Pipeline:**
+```
+User Query
+    ↓
+EmbeddingProvider.embed_text() [Phase 2 - NEW]
+    ↓ Query Vector (1536 dims)
+VectorStore.search() [Phase 2 - NEW]
+    ↓ List[SearchResult] (top-K similar chunks)
+Format and Return
+    ↓
+Most Relevant Chunks (ready for LLM augmentation)
+```
+
+**Configuration Strategy:**
+- Environment variable-driven configuration (no hardcoding)
+- Separate configuration for each provider (embedding, vector store)
+- Sensible defaults for development and production
+- Required credentials sourced from secure environment variables
+- Configuration validation at initialization time
+
+**Key Configuration Concerns:**
+- Provider type selection for embedding and vector storage
+- Provider-specific parameters (models, endpoints, credentials, timeouts)
+- Performance tuning (batch sizes, retry counts)
+- Vector dimensionality alignment between embedding provider and vector store
+- Distance metric selection for similarity search
+
+## 12. Roadmap
 
 ### Phase 1 (Day 2) - ✅ COMPLETE
 - Abstract protocols for EmbeddingProvider, VectorStore
@@ -378,27 +492,33 @@ chunks = chunker.chunk(document_text, doc_id="doc_123")
 - 24 comprehensive unit tests
 - Module documentation
 
-### Phase 2 (Day 3) - Planned
-- Implement EmbeddingProvider: OpenAI, Claude, local
-- Implement VectorStore: Qdrant, Weaviate
-- Document loading and ingestion service
-- End-to-end integration tests
+### Phase 2 (Day 10) - 🔄 IN PROGRESS
+- ✅ OpenAI EmbeddingProvider implementation
+- ✅ Qdrant VectorStore implementation
+- ✅ Factory pattern extension
+- ✅ 30+ comprehensive unit and integration tests
+- ✅ Configuration management (environment variables)
+- ✅ End-to-end integration testing
+- ✅ Documentation updates (RFC, SRS, ADR, C4, EDI)
 
-### Phase 3 (Day 4) - Planned
+### Phase 3 (Future) - Planned
 - RAG integration with agent service
 - Retrieval in agent prompts
 - RAG observability and metrics
 - Performance benchmarking
 
 ### Phase 4+ - Future
+- Additional embedding providers (Claude, local, HuggingFace)
+- Additional vector stores (Weaviate, Pinecone, ChromaDB)
 - Advanced chunking: code-aware, HTML, PDF, multi-language
 - Hybrid retrieval (BM25 + vector)
 - Re-ranking strategies
 - RAG evaluation framework
 - Cost tracking and FinOps
 
-## 12. Success Criteria
+## 13. Success Criteria
 
+### Phase 1 - ✅ COMPLETE
 - [x] Abstract protocols (EmbeddingProvider, VectorStore) defined
 - [x] 2+ chunking strategies implemented with LangChain
 - [x] Factory pattern with configuration-driven selection
@@ -406,9 +526,26 @@ chunks = chunker.chunk(document_text, doc_id="doc_123")
 - [x] Type checking (mypy) clean
 - [x] Code quality (ruff) clean
 - [x] Comprehensive module documentation
-- [ ] Concrete embedding provider implementations (Phase 2)
-- [ ] Concrete vector store implementations (Phase 2)
-- [ ] End-to-end RAG pipeline (Phase 2)
+
+### Phase 2 - 🔄 IN PROGRESS
+- [ ] OpenAI EmbeddingProvider fully implemented
+- [ ] Qdrant VectorStore fully implemented
+- [ ] Factory pattern extended for providers
+- [ ] 30+ comprehensive unit and integration tests
+- [ ] Configuration management (environment variables)
+- [ ] Type safety (mypy --strict clean for new code)
+- [ ] Code quality (ruff clean for new code)
+- [ ] RFC-009 Phase 2 documentation complete
+- [ ] SRS-001 requirements added (FR-014, FR-015, NFR-009)
+- [ ] ADR-010 & ADR-011 created (provider selections)
+- [ ] C4-001 updated with new containers
+- [ ] EDI-001 updated with traceability
+- [ ] Module README extended with examples
+
+### Phase 3+ - Future
+- [ ] RAG integration with agent service
+- [ ] Retrieval in agent prompts
+- [ ] RAG observability and metrics
 
 ## 13. Risks & Mitigations
 
@@ -455,36 +592,33 @@ This is the first paragraph.
 This is another paragraph with more content.
 """
 
-chunks = chunker.chunk(document, doc_id="doc_001")
-for chunk in chunks:
-    print(f"Chunk {chunk.sequence}: {chunk.text[:100]}...")
-    print(f"  Position: {chunk.start_pos}-{chunk.end_pos}")
-    print(f"  Strategy: {chunk.metadata['strategy']}")
-```
+## 15. Appendix: Design Patterns & Principles
 
-### Configuration Example
-```python
-# From environment variables
-import os
-from aegis_platform.rag.models import ChunkingConfig
-from aegis_platform.rag.chunking import create_chunker
+### Protocol-Based Abstractions
+The architecture uses `@runtime_checkable` protocols to define contracts for embedding providers and vector stores. This enables:
+- Runtime duck-typing without inheritance hierarchies
+- Easy mocking and testing with protocol-compliant fakes
+- Loose coupling to specific vendor implementations
+- Future providers can implement protocols without modifying core code
 
-config = ChunkingConfig(
-    strategy=os.getenv("RAG_CHUNKING_STRATEGY", "recursive"),
-    chunk_size=int(os.getenv("RAG_CHUNK_SIZE", "1024")),
-    overlap=int(os.getenv("RAG_CHUNK_OVERLAP", "128")),
-)
-chunker = create_chunker(config)
-```
+### Configuration-Driven Selection
+All provider instantiation is configuration-driven via environment variables:
+- No hardcoding of provider types or credentials
+- Support for switching providers without code changes
+- Clear validation errors for missing or invalid configuration
+- Extensible patterns for future configuration management
 
-### Strategy Registry Example
-```python
-from aegis_platform.rag.chunking import get_available_strategies
+### Factory Pattern for Provider Instantiation
+A centralized factory abstracts provider creation:
+- Single responsibility: validate configuration and instantiate providers
+- Registry pattern: maintains known providers and enables registration of new ones
+- Error handling: centralized validation logic
+- Testability: easy to mock or stub for testing
 
-strategies = get_available_strategies()
-print("Available strategies:", strategies)
-# Output: Available strategies: ['recursive', 'markdown']
-```
+### End-to-End Data Flow
+Document ingestion and query execution follow predictable pipelines:
+- **Ingestion:** Document → Chunking → Embedding → Vector Storage → Indexed
+- **Query:** User Query → Embedding → Vector Search → Relevant Chunks → LLM Context
 
 ---
 
