@@ -1,22 +1,22 @@
 """RAG (Retrieval-Augmented Generation) module for AEGIS Platform.
 
 This module provides abstract protocols and implementations for:
-- Document embeddings with pluggable providers
+- Document embeddings with pluggable providers (OpenAI, NVIDIA NIM)
 - Configurable document chunking strategies (LangChain-based)
-- Vector store interfaces for retrieval
+- Vector store interfaces for retrieval (Qdrant)
 
 All components are designed as abstract protocols to support dependency
 injection and runtime provider selection via configuration files.
 
 Package structure:
 - embeddings/: Embedding providers subpackage
-  - __init__.py: EmbeddingConfig and EmbeddingProvider protocol
   - openai.py: OpenAI embedding provider implementation
+  - nvidia.py: NVIDIA NIM API embedding provider implementation
 - storage/: Vector storage providers subpackage
-  - __init__.py: VectorStoreConfig and VectorStore protocol
   - qdrant.py: Qdrant vector database implementation
 - chunking/: LangChain-based text chunking
 - models.py: Data models (Chunk, Document, SearchResult, etc.)
+- provider_factory.py: Factory functions for creating providers
 """
 
 from aegis_platform.rag.chunking import (
@@ -25,8 +25,9 @@ from aegis_platform.rag.chunking import (
     create_chunker,
 )
 from aegis_platform.rag.embeddings import (
-    EmbeddingConfig,
     EmbeddingProvider,
+    NVIDIAEmbeddingConfig,
+    NVIDIAEmbeddingProvider,
     OpenAIEmbedding,
     OpenAIEmbeddingConfig,
 )
@@ -55,10 +56,11 @@ __all__ = [
     "ChunkingConfig",
     "ChunkingStrategy",
     "Document",
-    "EmbeddingConfig",
     "EmbeddingProvider",
     "EmbeddingRequest",
     "EmbeddingResponse",
+    "NVIDIAEmbeddingConfig",
+    "NVIDIAEmbeddingProvider",
     "OpenAIEmbedding",
     "OpenAIEmbeddingConfig",
     "QdrantVectorStore",

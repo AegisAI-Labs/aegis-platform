@@ -425,7 +425,7 @@ uv run ruff check src/aegis_platform/rag/
 ## References
 
 - [LangChain Text Splitters](https://python.langchain.com/docs/modules/data_connection/document_loaders/split_documents)
-- [Vector Search Best Practices](https://www.qdrant.io/articles/)
+- [Vector Search Best Practices](https://qdrant.tech/documentation/cloud-quickstart/)
 - [RAG Architecture Patterns](https://arxiv.org/abs/2312.10997)
 
 ## Contributing
