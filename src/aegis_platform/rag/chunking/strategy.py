@@ -9,7 +9,7 @@ variables or dependency injection.
 """
 
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from aegis_platform.rag.models import Chunk
 
@@ -36,7 +36,7 @@ class ChunkingConfig:
     max_chunk_size: int = 2048
     preserve_sentences: bool = True
     separator: str = "\n\n"
-    extra_params: dict = field(default_factory=dict)
+    extra_params: dict[str, Any] = field(default_factory=dict)
 
     def validate(self) -> None:
         """Validate configuration parameters.
@@ -93,7 +93,7 @@ class ChunkingStrategy(Protocol):
         """
         ...
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict[str, Any]:
         """Get current chunking configuration.
 
         Returns:
@@ -101,7 +101,7 @@ class ChunkingStrategy(Protocol):
         """
         ...
 
-    def update_config(self, **kwargs) -> None:
+    def update_config(self, **kwargs: Any) -> None:
         """Update chunking configuration at runtime.
 
         Args:

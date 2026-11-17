@@ -624,4 +624,263 @@ All Phase 2 implementation SHALL satisfy:
 
 ---
 
-**Status:** Design complete, ready for implementation approval ✅
+## Experiment Scripts
+
+The Day 10 experiment includes Python scripts to validate the implementations.
+
+### Day 10 Experiment Script
+
+**File:** `scripts/day10_embedding_vectorstore_experiment.py`
+
+**Purpose:** Validate OpenAI embedding provider and Qdrant vector store implementations against performance, reliability, and quality baselines.
+
+#### Features Tested
+
+1. **Embedding Batching Efficiency**
+   - Single chunk embedding latency
+   - Batch embedding latency (10, 50, 100 chunks)
+   - Latency per embedding metric
+   - Batching efficiency measurement
+
+2. **Vector Search Latency**
+   - Collection creation
+   - Vector insertion (100 vectors)
+   - Search latency (top 10 results)
+   - Metadata filtering performance
+
+3. **Error Handling & Retry Logic**
+   - Health check functionality
+   - Configuration validation
+   - API error handling
+   - Retry mechanism verification
+
+4. **Configuration-Driven Behavior**
+   - Provider registry discovery
+   - Vector store registry discovery
+   - Configuration propagation
+   - Multi-provider support
+
+5. **Type Safety**
+   - mypy --strict compliance
+   - Type annotation coverage
+   - Protocol compliance
+
+6. **Code Quality**
+   - ruff linting
+   - Import ordering
+   - Docstring completeness
+   - Code style compliance
+
+7. **Performance Baselines**
+   - Single chunk embedding (<100ms target)
+   - Batch efficiency (throughput)
+   - Search latency (<50ms target on 1M vectors)
+
+#### Usage
+
+```bash
+# Default: Use mocked API calls (no credentials needed)
+uv run python scripts/day10_embedding_vectorstore_experiment.py
+
+# Verbose output
+uv run python scripts/day10_embedding_vectorstore_experiment.py --verbose
+
+# With live OpenAI API (requires OPENAI_API_KEY)
+OPENAI_API_KEY=sk-... uv run python scripts/day10_embedding_vectorstore_experiment.py --live
+```
+
+#### Output
+
+The script produces:
+
+1. **Console Output:** Real-time test execution with pass/fail status
+2. **Summary Report:** Final results for all tested components
+3. **Exit Code:** 0 for success, 1 for failures
+
+#### Sample Output
+
+```
+[============================================================]
+|   Day 10 Embedding and Vector Store Experiment            |
+[============================================================]
+
+[*] Testing Embedding Batching Efficiency
+============================================================
+  Batch   1:   45.2ms (  45.2ms per embedding)
+  Batch  10:  120.5ms (  12.1ms per embedding)
+  Batch  50:  380.2ms (   7.6ms per embedding)
+  Batch 100:  720.1ms (   7.2ms per embedding)
+
+[*] Testing Vector Search Latency
+============================================================
+  Created collection: day10_experiment
+  Inserted 100 vectors: 125.3ms
+  Search (top 10): 8.7ms (found 10 results)
+
+[OK] Type Safety (mypy --strict): PASS
+[OK] Code Quality (ruff): PASS
+[OK] Configuration: Available providers found
+[OK] Performance: Baselines measured
+```
+
+#### Requirements
+
+- Python 3.9+
+- OpenAI Python SDK (openai)
+- Qdrant Python Client (qdrant-client)
+- Aegis Platform RAG module
+
+#### Notes
+
+- With mocked API calls (default), latencies represent internal processing only
+- With live API calls (--live flag), latencies include network latency
+- Qdrant must be running (Docker or cloud) for vector search tests
+- No real data is persisted; collections are cleaned up after tests
+- Full documentation in `scripts/README.md`
+
+---
+
+## Running Qdrant Locally
+
+### Prerequisites
+- Docker installed and running
+
+### Quick Start
+
+```bash
+# Start Qdrant container (using docker-compose for convenience)
+docker-compose -f docker-compose.qdrant.yml up -d
+
+# Verify it's running
+curl http://localhost:6333/health
+```
+
+**Output:**
+```json
+{
+  "title": "qdrant - vector search engine",
+  "version": "1.0.0"
+}
+```
+
+### Docker Compose Configuration
+
+The included `docker-compose.qdrant.yml` provides:
+- REST API on port 6333
+- gRPC API on port 6334
+- Persistent storage in `qdrant_storage` volume
+- Health checks
+- Automatic restart
+
+### Ports Explained
+
+- **6333**: REST API (HTTP)
+- **6334**: gRPC API (high-performance protocol)
+
+### Verification
+
+```bash
+# Health check via REST API
+curl http://localhost:6333/health
+
+# List collections
+curl http://localhost:6333/collections
+
+# Stop Qdrant
+docker-compose -f docker-compose.qdrant.yml down
+```
+
+### Python Verification
+
+```python
+import asyncio
+from qdrant_client import AsyncQdrantClient
+
+async def check_health():
+    client = AsyncQdrantClient(url="http://localhost:6333")
+    collections = await client.get_collections()
+    print(f"Qdrant is running. Collections: {collections}")
+
+asyncio.run(check_health())
+```
+
+### Environment Configuration
+
+Add to `.env` or your environment:
+
+```bash
+QDRANT_URL=http://localhost:6333
+QDRANT_TIMEOUT=30
+QDRANT_VECTOR_SIZE=1536
+QDRANT_DISTANCE_METRIC=cosine
+```
+
+### Common Issues
+
+**Docker: "Cannot connect to Docker daemon"**
+- Start Docker Desktop (macOS/Windows) or run `sudo systemctl start docker` (Linux)
+
+**Port Already in Use**
+```bash
+# Windows: Kill process on port 6333
+netstat -ano | findstr :6333
+taskkill /PID <PID> /F
+
+# Linux/macOS:
+lsof -i :6333
+kill -9 <PID>
+```
+
+**Qdrant Connection Refused**
+```bash
+# Check if running
+curl http://localhost:6333/health
+
+# If not, start it
+docker-compose -f docker-compose.qdrant.yml up -d
+```
+
+### Full RAG Pipeline Example
+
+```python
+from aegis_platform.rag import (
+    ChunkingConfig, create_chunker,
+    OpenAIEmbeddingConfig, create_embedding_provider,
+    QdrantVectorStoreConfig, create_vector_store,
+)
+
+async def rag_pipeline():
+    # 1. Chunk documents (Phase 1)
+    chunker = create_chunker(
+        ChunkingConfig(strategy="recursive", chunk_size=512)
+    )
+    chunks = chunker.chunk("Your long document text...")
+
+    # 2. Create embeddings (Phase 2)
+    embedder = create_embedding_provider(
+        OpenAIEmbeddingConfig(api_key="sk-...")
+    )
+    embeddings = await embedder.embed([c.text for c in chunks])
+
+    # 3. Store in Qdrant (Phase 2)
+    store = create_vector_store(
+        QdrantVectorStoreConfig(url="http://localhost:6333")
+    )
+    await store.insert(
+        collection="documents",
+        vectors=embeddings,
+        metadata=[{"id": c.id, "source": "docs"} for c in chunks],
+    )
+
+    # 4. Query (Phase 3 - future)
+    query = "What is RAG?"
+    query_embedding = await embedder.embed([query])
+    results = await store.search(
+        collection="documents",
+        vector=query_embedding[0],
+        limit=5,
+    )
+    return results
+```
+
+---

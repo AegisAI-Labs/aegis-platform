@@ -8,6 +8,7 @@ as it attempts to keep related content together.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -135,7 +136,7 @@ class LangChainRecursiveChunker(ChunkingStrategy):
 
         return chunks
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict[str, Any]:
         """Get current chunking configuration."""
         return {
             "strategy": "langchain-recursive",
@@ -146,7 +147,7 @@ class LangChainRecursiveChunker(ChunkingStrategy):
             "max_chunk_size": self.max_chunk_size,
         }
 
-    def update_config(self, **kwargs) -> None:
+    def update_config(self, **kwargs: Any) -> None:
         """Update configuration at runtime.
 
         Args:

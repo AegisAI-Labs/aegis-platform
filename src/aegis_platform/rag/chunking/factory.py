@@ -5,6 +5,8 @@ based on configuration, enabling dependency injection and runtime
 strategy selection via environment variables.
 """
 
+from typing import cast
+
 from aegis_platform.rag.chunking.langchain_markdown import LangChainMarkdownChunker
 from aegis_platform.rag.chunking.langchain_recursive import LangChainRecursiveChunker
 from aegis_platform.rag.chunking.strategy import ChunkingConfig, ChunkingStrategy
@@ -51,9 +53,12 @@ def create_chunker(config: ChunkingConfig) -> ChunkingStrategy:
         )
 
     # All LangChain strategies use chunk_size and overlap
-    return strategy_class(
-        chunk_size=config.chunk_size,
-        overlap=config.overlap,
+    return cast(
+        ChunkingStrategy,
+        strategy_class(
+            chunk_size=config.chunk_size,
+            overlap=config.overlap,
+        ),
     )
 
 

@@ -8,6 +8,7 @@ preserving heading hierarchy and code blocks is important.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from langchain_text_splitters import MarkdownTextSplitter
 
@@ -130,7 +131,7 @@ class LangChainMarkdownChunker(ChunkingStrategy):
 
         return chunks
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict[str, Any]:
         """Get current chunking configuration."""
         return {
             "strategy": "langchain-markdown",
@@ -140,7 +141,7 @@ class LangChainMarkdownChunker(ChunkingStrategy):
             "max_chunk_size": self.max_chunk_size,
         }
 
-    def update_config(self, **kwargs) -> None:
+    def update_config(self, **kwargs: Any) -> None:
         """Update configuration at runtime.
 
         Args:

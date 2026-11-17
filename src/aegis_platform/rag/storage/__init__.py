@@ -1,20 +1,32 @@
-"""Abstract vector store protocol for retrieval.
+"""Vector storage providers for semantic search.
 
-The VectorStore protocol defines the interface for storing and retrieving
-embeddings. Implementations (Qdrant, Weaviate, Pinecone, local) must
-support:
+This package contains abstract protocols, configuration classes, and concrete
+implementations for storing and retrieving embeddings using various vector databases.
 
-- Insert/update embeddings with metadata
-- Search by vector similarity
-- Delete and update operations
-- Collection management
-- Batch operations for efficiency
+Modules:
+    base: Abstract VectorStore protocol and SearchResult model (deprecated - use __init__ below)
+    qdrant: Qdrant vector database implementation
+
+Classes exported:
+    VectorStoreConfig: Configuration for vector store instantiation
+    VectorStore: Abstract protocol for vector storage
+    SearchResult: Result from vector store search
+    QdrantVectorStore: Qdrant implementation
+    QdrantVectorStoreConfig: Qdrant-specific configuration
+
+Usage:
+    from aegis_platform.rag.storage import VectorStore, VectorStoreConfig, SearchResult
+    from aegis_platform.rag.storage.qdrant import QdrantVectorStore
 """
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from aegis_platform.rag.models import SearchResult
+from aegis_platform.rag.storage.qdrant import (
+    QdrantVectorStore,
+    QdrantVectorStoreConfig,
+)
 
 
 @dataclass
@@ -65,7 +77,7 @@ class VectorStore(Protocol):
         self,
         collection: str,
         vectors: list[list[float]],
-        metadata: list[dict],
+        metadata: list[dict[str, Any]],
         ids: list[str] | None = None,
     ) -> list[str]:
         """Insert vectors into collection.
@@ -130,7 +142,7 @@ class VectorStore(Protocol):
         collection: str,
         ids: list[str],
         vectors: list[list[float]],
-        metadata: list[dict] | None = None,
+        metadata: list[dict[str, Any]] | None = None,
     ) -> int:
         """Update vectors and/or metadata.
 
@@ -185,7 +197,7 @@ class VectorStore(Protocol):
         """
         ...
 
-    async def collection_stats(self, collection: str) -> dict:
+    async def collection_stats(self, collection: str) -> dict[str, Any]:
         """Get statistics about a collection.
 
         Returns:
@@ -200,3 +212,12 @@ class VectorStore(Protocol):
             True if store is healthy, False otherwise
         """
         ...
+
+
+__all__ = [
+    "QdrantVectorStore",
+    "QdrantVectorStoreConfig",
+    "SearchResult",
+    "VectorStore",
+    "VectorStoreConfig",
+]

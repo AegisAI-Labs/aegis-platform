@@ -1,17 +1,30 @@
-"""Abstract embedding provider protocol with configuration.
+"""Embedding providers for text-to-vector conversion.
 
-The EmbeddingProvider is designed as an abstract protocol to enable
-runtime provider switching via dependency injection. Concrete implementations
-(e.g., OpenAI, local models, mock providers) are instantiated based on
-configuration from environment variables.
+This package contains abstract protocols, configuration classes, and concrete
+implementations for generating embeddings from text using various providers.
 
-This follows the provider pattern used throughout AEGIS Platform for
-LLM, reliability, and observability providers.
+Modules:
+    base: Abstract EmbeddingProvider protocol (deprecated - use __init__ below)
+    openai: OpenAI embedding provider implementation
+
+Classes exported:
+    EmbeddingConfig: Configuration for embedding provider instantiation
+    EmbeddingProvider: Abstract protocol for embedding providers
+    OpenAIEmbedding: OpenAI implementation
+    OpenAIEmbeddingConfig: OpenAI-specific configuration
+
+Usage:
+    from aegis_platform.rag.embeddings import EmbeddingConfig, EmbeddingProvider
+    from aegis_platform.rag.embeddings.openai import OpenAIEmbedding
 """
 
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from aegis_platform.rag.embeddings.openai import (
+    OpenAIEmbedding,
+    OpenAIEmbeddingConfig,
+)
 from aegis_platform.rag.models import EmbeddingRequest, EmbeddingResponse
 
 
@@ -111,3 +124,11 @@ class EmbeddingProvider(Protocol):
             Used for startup validation and monitoring.
         """
         ...
+
+
+__all__ = [
+    "EmbeddingConfig",
+    "EmbeddingProvider",
+    "OpenAIEmbedding",
+    "OpenAIEmbeddingConfig",
+]
