@@ -492,14 +492,25 @@ Most Relevant Chunks (ready for LLM augmentation)
 - 24 comprehensive unit tests
 - Module documentation
 
-### Phase 2 (Day 10) - 🔄 IN PROGRESS
+### Phase 2a (Day 10) - ✅ COMPLETE
 - ✅ OpenAI EmbeddingProvider implementation
+- ✅ NVIDIA EmbeddingProvider implementation (Nemotron 3.5)
 - ✅ Qdrant VectorStore implementation
 - ✅ Factory pattern extension
 - ✅ 30+ comprehensive unit and integration tests
 - ✅ Configuration management (environment variables)
 - ✅ End-to-end integration testing
 - ✅ Documentation updates (RFC, SRS, ADR, C4, EDI)
+
+### Phase 2b (Day 11) - 🔄 IN PROGRESS
+- RAG Service Layer - Orchestration & API Endpoints
+  - RAGService class (embedding + vector store orchestration)
+  - Request/response Pydantic schemas
+  - 6 REST API endpoints (health, embed, ingest, search, query, collections)
+  - Dependency injection and provider wiring
+  - 33+ integration tests
+  - Complete API documentation
+  - SRS and ADR updates
 
 ### Phase 3 (Future) - Planned
 - RAG integration with agent service
@@ -527,20 +538,35 @@ Most Relevant Chunks (ready for LLM augmentation)
 - [x] Code quality (ruff) clean
 - [x] Comprehensive module documentation
 
-### Phase 2 - 🔄 IN PROGRESS
-- [ ] OpenAI EmbeddingProvider fully implemented
-- [ ] Qdrant VectorStore fully implemented
-- [ ] Factory pattern extended for providers
-- [ ] 30+ comprehensive unit and integration tests
-- [ ] Configuration management (environment variables)
-- [ ] Type safety (mypy --strict clean for new code)
-- [ ] Code quality (ruff clean for new code)
-- [ ] RFC-009 Phase 2 documentation complete
-- [ ] SRS-001 requirements added (FR-014, FR-015, NFR-009)
-- [ ] ADR-010 & ADR-011 created (provider selections)
-- [ ] C4-001 updated with new containers
-- [ ] EDI-001 updated with traceability
-- [ ] Module README extended with examples
+### Phase 2a - ✅ COMPLETE
+- [x] OpenAI EmbeddingProvider fully implemented
+- [x] NVIDIA EmbeddingProvider fully implemented (Nemotron 3.5)
+- [x] Qdrant VectorStore fully implemented
+- [x] Factory pattern extended for providers
+- [x] 30+ comprehensive unit and integration tests
+- [x] Configuration management (environment variables)
+- [x] Type safety (mypy --strict clean for new code)
+- [x] Code quality (ruff clean for new code)
+- [x] RFC-009 Phase 2a documentation complete
+- [x] SRS-001 requirements added (FR-014, FR-015, NFR-009)
+- [x] ADR-010 & ADR-011 created (provider selections)
+- [x] C4-001 updated with new containers
+- [x] EDI-001 updated with traceability
+- [x] Module README extended with examples
+
+### Phase 2b - 🔄 IN PROGRESS
+- [ ] RAGService class fully implemented (200+ lines)
+- [ ] Pydantic schemas for all 6 endpoints (150+ lines)
+- [ ] 6 FastAPI endpoints fully implemented
+- [ ] Dependency injection and provider wiring
+- [ ] 33+ integration tests all passing
+- [ ] Configuration-driven provider selection (NVIDIA/OpenAI)
+- [ ] Type safety (mypy --strict clean)
+- [ ] Code quality (ruff clean)
+- [ ] API documentation complete with examples
+- [ ] SRS-001 updated with endpoint specifications
+- [ ] ADR created for RAG Service wiring strategy
+- [ ] No test regressions (203+ existing tests still pass)
 
 ### Phase 3+ - Future
 - [ ] RAG integration with agent service
