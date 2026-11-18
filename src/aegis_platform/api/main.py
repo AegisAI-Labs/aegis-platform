@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from aegis_platform.agent.service import AgentService
 from aegis_platform.api.models import AgentRequest, AgentResponse
+from aegis_platform.api.rag import router as rag_router
 from aegis_platform.config.settings import settings
 from aegis_platform.llm.errors import (
     ProviderAuthenticationError,
@@ -25,6 +26,9 @@ from aegis_platform.observability.retry_telemetry import (
 )
 
 app = FastAPI(title="Aegis AI Platform")
+
+# Include RAG router
+app.include_router(rag_router, prefix="/rag", tags=["RAG"])
 
 llm_provider = LLMProviderFactory.create_llm_provider(settings)
 
