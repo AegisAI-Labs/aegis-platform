@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from aegis_platform.rag.access_control import AccessLevel, Role
+
 
 class DocumentInput(BaseModel):
     """Document for ingestion."""
@@ -16,6 +18,16 @@ class DocumentInput(BaseModel):
     content: str = Field(..., description="Document content")
     metadata: dict[str, Any] | None = Field(
         default=None, description="Document metadata (source, type, etc.)"
+    )
+    access_level: AccessLevel = Field(
+        default=AccessLevel.INTERNAL, description="Who may retrieve this document"
+    )
+    allowed_roles: list[Role] = Field(
+        default_factory=list, description="Roles allowed to read RESTRICTED documents"
+    )
+    organization_id: str | None = Field(
+        default=None,
+        description="Owning tenant; defaults to the caller's X-Organization-Id header",
     )
 
     @field_validator("doc_id")
@@ -92,6 +104,12 @@ class SearchResult(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Chunk metadata",
+    )
+    rerank_score: float | None = Field(
+        default=None,
+        description="Cross-encoder relevance (0.0-1.0) when rerank=true",
+        ge=0.0,
+        le=1.0,
     )
 
 
@@ -205,3 +223,42 @@ class ErrorDetail(BaseModel):
 
     detail: str = Field(..., description="Error message")
     error_code: str | None = Field(None, description="Error code for programmatic handling")
+
+
+class VerifySource(BaseModel):
+    """A passage that was given to the LLM as context."""
+
+    doc_id: str = Field(..., min_length=1, description="Source document identifier")
+    text: str = Field(..., min_length=1, max_length=100_000, description="Passage text")
+    title: str | None = Field(default=None, description="Document title (defaults to doc_id)")
+    score: float = Field(default=1.0, ge=0.0, le=1.0, description="Retrieval score")
+
+
+class VerifyRequest(BaseModel):
+    """Request to check an LLM answer against its sources."""
+
+    query: str = Field(..., min_length=1, max_length=10_000, description="User query")
+    answer: str = Field(..., min_length=1, max_length=100_000, description="LLM answer")
+    sources: list[VerifySource] = Field(
+        default_factory=list, max_length=100, description="Passages provided to the LLM"
+    )
+
+
+class CitationOut(BaseModel):
+    """One sentence of the answer and the sources that support it."""
+
+    claim: str
+    doc_ids: list[str]
+    confidence: float
+
+
+class VerifyResponse(BaseModel):
+    """Citation and hallucination assessment of an answer."""
+
+    citations: list[CitationOut] = Field(default_factory=list)
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Overall grounding confidence")
+    risk_level: str = Field(..., description='Hallucination risk: "low", "medium" or "high"')
+    risk_score: float = Field(..., ge=0.0, le=1.0)
+    patterns_detected: list[str] = Field(default_factory=list)
+    explanation: str
+    latency_ms: float = Field(..., ge=0)

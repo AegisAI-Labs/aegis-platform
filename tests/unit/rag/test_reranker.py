@@ -8,7 +8,6 @@ Tests coverage:
 - Configuration validation
 """
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,8 +24,6 @@ from aegis_platform.rag.reranker_base import (
     RawResult,
     RerankerConfig,
 )
-
-sys.modules["sentence_transformers"] = MagicMock()
 
 
 class TestRankedResult:

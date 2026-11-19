@@ -24,7 +24,7 @@ class TestPIIConfig:
         config = PIIConfig()
         assert config.enabled is True
         assert config.mask_char == "[REDACTED]"
-        assert config.confidence_threshold == 0.75
+        assert config.confidence_threshold == 0.4
         assert config.detect_names is False
         assert config.detect_addresses is False
 
@@ -271,8 +271,8 @@ class TestPIIMasking:
 
         assert "***" in result
 
-    def test_mask_pii_error_graceful_degradation(self, mock_presidio):
-        """Test graceful error handling during masking."""
+    def test_mask_pii_error_fails_closed(self, mock_presidio):
+        """Masking errors raise instead of returning the unmasked text."""
         detector = PIIDetector()
         detector.anonymizer.anonymize.side_effect = RuntimeError("Anonymizer failed")
 
@@ -285,11 +285,16 @@ class TestPIIMasking:
 
         detector.analyzer.analyze.return_value = [mock_result]
 
-        text = "john.doe@example.com"
-        result = detector.mask_pii(text)
+        with pytest.raises(RuntimeError, match="PII masking failed"):
+            detector.mask_pii("john.doe@example.com")
 
-        # Should return original text on error
-        assert result == text
+    def test_mask_dict_error_fails_closed(self, mock_presidio):
+        """Dictionary masking propagates errors instead of returning the input."""
+        detector = PIIDetector()
+        detector.anonymizer.anonymize.side_effect = RuntimeError("Anonymizer failed")
+
+        with pytest.raises(RuntimeError, match="PII masking failed"):
+            detector.mask_pii_in_dict({"email": "john.doe@example.com"})
 
 
 class TestDictionaryMasking:
@@ -378,6 +383,13 @@ class TestAsyncWrappers:
 
 class TestSingletonPattern:
     """Test singleton pattern for PIIDetector."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_singleton(self):
+        import aegis_platform.rag.pii_detector as pii_module
+
+        yield
+        pii_module._pii_detector = None
 
     def test_singleton_creation(self, mock_presidio):
         """Test that singleton is created correctly."""

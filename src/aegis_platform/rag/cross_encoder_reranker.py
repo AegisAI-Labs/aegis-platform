@@ -26,6 +26,7 @@ Example:
 """
 
 import logging
+import math
 from typing import Any
 
 from pydantic import Field
@@ -86,6 +87,7 @@ class CrossEncoderReranker(RankerBase):
         self.config: CrossEncoderConfig = config
         self.model: Any = None
         self._model_loaded = False
+        self._apply_sigmoid = False
 
         logger.debug(
             f"Cross-encoder reranker initialized: "
@@ -122,11 +124,23 @@ class CrossEncoderReranker(RankerBase):
                 trust_remote_code=self.config.trust_remote_code,
             )
             self._model_loaded = True
+            # ms-marco cross-encoders emit raw logits (Identity activation); clamping those
+            # to [0, 1] collapses every negative score to 0.0, so map them with a sigmoid.
+            activation = getattr(self.model, "activation_fn", None)
+            self._apply_sigmoid = type(activation).__name__ == "Identity"
             logger.debug(f"Cross-encoder model loaded: {self.config.model_name}")
         except Exception as e:
             msg = f"Failed to load cross-encoder model: {e}"
             logger.error(msg)
             raise RuntimeError(msg) from e
+
+    def _normalize_score(self, raw: float) -> float:
+        """Map a raw model score into [0, 1] when normalization is enabled."""
+        if not self.config.normalize_scores:
+            return raw
+        if self._apply_sigmoid:
+            return 1.0 / (1.0 + math.exp(-raw))
+        return max(0.0, min(1.0, raw))
 
     async def score(self, query: str, document: str) -> float:
         """Score query-document pair relevance.
@@ -153,10 +167,7 @@ class CrossEncoderReranker(RankerBase):
         try:
             score = self.model.predict([[query, document]], show_progress_bar=False)
 
-            normalized_score = float(score[0])
-
-            if self.config.normalize_scores:
-                normalized_score = max(0.0, min(1.0, normalized_score))
+            normalized_score = self._normalize_score(float(score[0]))
 
             logger.debug(f"Scored query-document pair: {normalized_score:.4f}")
 
@@ -200,14 +211,7 @@ class CrossEncoderReranker(RankerBase):
                 pairs, batch_size=self.config.batch_size, show_progress_bar=False
             )
 
-            normalized_scores = []
-            for score in scores:
-                normalized = float(score)
-
-                if self.config.normalize_scores:
-                    normalized = max(0.0, min(1.0, normalized))
-
-                normalized_scores.append(normalized)
+            normalized_scores = [self._normalize_score(float(score)) for score in scores]
 
             logger.debug(
                 f"Batch scored {len(documents)} documents: "

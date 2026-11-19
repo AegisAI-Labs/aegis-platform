@@ -1,14 +1,19 @@
-"""RAG REST API endpoints for embedding, ingestion, search, and query operations.
+"""RAG REST API endpoints for embedding, ingestion, search, query and verification.
 
-Provides 6 FastAPI endpoints:
-1. POST /api/rag/health - Service health check
-2. POST /api/rag/embed - Generate embeddings for text
-3. POST /api/rag/ingest - Ingest documents (chunk, embed, store)
-4. POST /api/rag/search - Semantic similarity search
-5. POST /api/rag/query - Full RAG pipeline (embed query + search)
-6. GET /api/rag/collections - List vector store collections
+Provides 7 FastAPI endpoints:
+1. POST /rag/health - Service health check
+2. POST /rag/embed - Generate embeddings for text
+3. POST /rag/ingest - Ingest documents with access metadata (chunk, embed, store)
+4. POST /rag/search - Semantic search through the safety pipeline
+5. POST /rag/query - Retrieval step of RAG through the safety pipeline
+6. GET /rag/collections - List vector store collections
+7. POST /rag/verify - Citation and hallucination check of an LLM answer
 
-Configuration-driven provider selection (NVIDIA/OpenAI via RAG_EMBEDDING_PROVIDER env var).
+Search and query apply guardrails, access control and PII masking on every call;
+query enhancement (?enhance=true) and cross-encoder reranking (?rerank=true) are opt-in.
+
+Caller identity comes from trusted X-User-Id / X-User-Role / X-Organization-Id headers,
+which an authenticating gateway must set. Requests without them are treated as GUEST.
 """
 
 import logging
@@ -16,8 +21,9 @@ import os
 from functools import lru_cache
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
+from aegis_platform.rag.access_control import Role, UserContext
 from aegis_platform.rag.models import Document
 from aegis_platform.rag.protocols import EmbeddingProvider, VectorStore
 from aegis_platform.rag.schemas import (
@@ -32,6 +38,14 @@ from aegis_platform.rag.schemas import (
     QueryResponse,
     SearchRequest,
     SearchResponse,
+    VerifyRequest,
+    VerifyResponse,
+)
+from aegis_platform.rag.secure_retrieval import (
+    QueryRejectedError,
+    access_metadata,
+    secure_retrieve,
+    verify_answer,
 )
 from aegis_platform.rag.service import RAGService
 
@@ -41,12 +55,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _env(*names: str) -> str | None:
+    """Return the first non-empty environment variable among ``names``."""
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return None
+
+
 def get_configured_embedding_provider() -> EmbeddingProvider:
     """
     Load embedding provider from configuration.
 
-    Uses RAG_EMBEDDING_PROVIDER env var to select provider.
-    Supported: "openai", "nvidia"
+    Uses RAG_EMBEDDING_PROVIDER env var to select provider:
+    - "openai": key from RAG_EMBEDDING_KEY, falling back to OPENAI_API_KEY
+    - "nvidia": all settings from RAG_EMBEDDING_* (see NVIDIAEmbeddingConfig.from_env)
 
     Returns:
         Configured EmbeddingProvider instance
@@ -54,28 +78,29 @@ def get_configured_embedding_provider() -> EmbeddingProvider:
     Raises:
         ValueError: If provider is unknown or configuration invalid
     """
-    from aegis_platform.rag.embeddings import OpenAIEmbeddingConfig
+    from aegis_platform.rag.embeddings import NVIDIAEmbeddingConfig, OpenAIEmbeddingConfig
     from aegis_platform.rag.provider_factory import (
         create_embedding_provider,
     )
 
-    provider_name = os.getenv("RAG_EMBEDDING_PROVIDER", "openai").lower()
+    provider_name = (_env("RAG_EMBEDDING_PROVIDER") or "openai").lower()
 
     if provider_name == "openai":
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = _env("RAG_EMBEDDING_KEY", "OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-        config = OpenAIEmbeddingConfig(api_key=api_key)
-        return create_embedding_provider(config)
-    else:
-        raise ValueError(f"Unknown embedding provider: {provider_name}")
+            raise ValueError("Set RAG_EMBEDDING_KEY or OPENAI_API_KEY")
+        return create_embedding_provider(OpenAIEmbeddingConfig(api_key=api_key))
+    if provider_name == "nvidia":
+        return create_embedding_provider(NVIDIAEmbeddingConfig.from_env())
+    raise ValueError(f"Unknown embedding provider: {provider_name}")
 
 
 def get_configured_vector_store() -> VectorStore:
     """
     Load vector store from configuration.
 
-    Uses RAG_VECTOR_STORE_* env vars for connection details.
+    Reads RAG_VECTOR_STORE_URL / RAG_VECTOR_STORE_API_KEY (falling back to QDRANT_URL /
+    QDRANT_API_KEY) and RAG_VECTOR_STORE_DISTANCE_METRIC.
     Currently supports: "qdrant"
 
     Returns:
@@ -89,15 +114,46 @@ def get_configured_vector_store() -> VectorStore:
     )
     from aegis_platform.rag.storage import QdrantVectorStoreConfig
 
-    store_type = os.getenv("RAG_VECTOR_STORE", "qdrant").lower()
+    store_type = (_env("RAG_VECTOR_STORE") or "qdrant").lower()
 
     if store_type == "qdrant":
-        url = os.getenv("QDRANT_URL", "http://localhost:6333")
-        api_key = os.getenv("QDRANT_API_KEY")
-        config = QdrantVectorStoreConfig(url=url, api_key=api_key)
+        config = QdrantVectorStoreConfig(
+            url=_env("RAG_VECTOR_STORE_URL", "QDRANT_URL") or "http://localhost:6333",
+            api_key=_env("RAG_VECTOR_STORE_API_KEY", "QDRANT_API_KEY"),
+            distance_metric=_env("RAG_VECTOR_STORE_DISTANCE_METRIC") or "cosine",
+        )
         return create_vector_store(config)
     else:
         raise ValueError(f"Unknown vector store: {store_type}")
+
+
+def get_user_context(
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+    x_organization_id: str | None = Header(default=None),
+) -> UserContext:
+    """
+    Build the caller's identity from trusted gateway headers.
+
+    Requests without X-User-Id and X-User-Role are treated as an anonymous GUEST,
+    which can only read PUBLIC documents.
+
+    Raises:
+        HTTPException (400): If X-User-Role is not a known role
+    """
+    if not x_user_id or not x_user_role:
+        return UserContext(user_id="anonymous", role=Role.GUEST)
+
+    try:
+        role = Role(x_user_role.strip().lower())
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown X-User-Role {x_user_role!r}; expected one of "
+            f"{[r.value for r in Role]}",
+        ) from e
+
+    return UserContext(user_id=x_user_id, role=role, organization_id=x_organization_id or None)
 
 
 @lru_cache(maxsize=1)
@@ -262,12 +318,14 @@ async def embed_text(
     responses={
         200: {"description": "Documents ingested successfully"},
         400: {"model": ErrorDetail, "description": "Invalid request"},
+        403: {"model": ErrorDetail, "description": "Caller may not ingest these documents"},
         503: {"model": ErrorDetail, "description": "Service unavailable"},
     },
 )
 async def ingest_documents(
     request: IngestRequest,
     service: RAGService = Depends(get_rag_service),
+    user: UserContext = Depends(get_user_context),
 ) -> IngestResponse:
     """
     Ingest documents: chunk, embed, and store in vector database.
@@ -275,32 +333,55 @@ async def ingest_documents(
     Pipeline:
     1. Chunk documents using configured strategy
     2. Generate embeddings for all chunks
-    3. Store chunks and embeddings in vector database
+    3. Store chunks, embeddings and access metadata in vector database
+
+    Each document's access_level, allowed_roles and organization_id are stored with
+    its chunks and enforced by /search and /query. organization_id defaults to the
+    caller's X-Organization-Id.
 
     Args:
         request: IngestRequest with list of documents
         service: RAGService instance (injected)
+        user: Caller identity (injected from headers)
 
     Returns:
         IngestResponse with chunk and document counts, latency
 
     Raises:
         HTTPException (400): If document list is empty or invalid
+        HTTPException (403): If the caller is a guest or targets another organization
         HTTPException (503): If ingestion fails
     """
-    try:
-        # Convert DocumentInput objects to Document domain model
-        documents = [
+    if user.role == Role.GUEST:
+        raise HTTPException(status_code=403, detail="Guests cannot ingest documents")
+
+    documents = []
+    for doc in request.documents:
+        organization_id = doc.organization_id or user.organization_id
+        if (
+            user.role != Role.ADMIN
+            and organization_id
+            and user.organization_id
+            and organization_id != user.organization_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Cannot ingest {doc.doc_id!r} into another organization",
+            )
+        documents.append(
             Document(
                 id=doc.doc_id,
                 title=doc.doc_id,  # Use doc_id as title
                 content=doc.content,
                 source="api",
-                metadata=doc.metadata or {},
+                metadata={
+                    **(doc.metadata or {}),
+                    **access_metadata(doc.access_level, doc.allowed_roles, organization_id),
+                },
             )
-            for doc in request.documents
-        ]
+        )
 
+    try:
         result = await service.ingest_documents(documents)
 
         logger.info(
@@ -343,38 +424,51 @@ async def ingest_documents(
     tags=["rag"],
     responses={
         200: {"description": "Search completed successfully"},
-        400: {"model": ErrorDetail, "description": "Invalid request"},
+        400: {"model": ErrorDetail, "description": "Invalid request or rejected by guardrails"},
         503: {"model": ErrorDetail, "description": "Search failed"},
     },
 )
 async def search_vectors(
     request: SearchRequest,
+    rerank: bool = Query(default=False, description="Rerank hits with a cross-encoder"),
+    enhance: bool = Query(default=False, description="Also search LLM query expansions"),
     service: RAGService = Depends(get_rag_service),
+    user: UserContext = Depends(get_user_context),
 ) -> SearchResponse:
     """
-    Perform semantic similarity search on ingested documents.
+    Perform semantic similarity search through the safety pipeline.
 
     Pipeline:
-    1. Embed the query text
-    2. Search vector store for similar chunks
-    3. Return top-k results sorted by similarity
+    1. Guardrails reject injection attempts (400)
+    2. Optional LLM query expansion (?enhance=true); expansions are re-validated
+    3. Vector search
+    4. Access control drops hits the caller may not read
+    5. Optional cross-encoder reranking (?rerank=true)
+    6. PII in returned passages is masked
 
     Args:
-        request: SearchRequest with query and optional top_k
+        request: SearchRequest with query, top_k and optional similarity_threshold
+        rerank: Rerank with the cross-encoder
+        enhance: Expand the query with the LLM
         service: RAGService instance (injected)
+        user: Caller identity (injected from headers)
 
     Returns:
         SearchResponse with search results and latency
 
     Raises:
-        HTTPException (400): If query is empty or top_k invalid
-        HTTPException (503): If search fails
+        HTTPException (400): If query is invalid or rejected by guardrails
+        HTTPException (503): If search, reranking or PII masking fails
     """
     try:
-        result = await service.search_similar(
+        result = await secure_retrieve(
+            service,
             query=request.query,
+            user=user,
             top_k=request.top_k,
             similarity_threshold=request.similarity_threshold,
+            rerank=rerank,
+            enhance=enhance,
         )
 
         logger.info(
@@ -385,6 +479,8 @@ async def search_vectors(
         )
 
         return SearchResponse(**result)
+    except QueryRejectedError as e:
+        raise _rejected(e) from e
     except ValueError as e:
         logger.warning("Search request validation failed: %s", e)
         raise HTTPException(
@@ -417,39 +513,46 @@ async def search_vectors(
     tags=["rag"],
     responses={
         200: {"description": "Query executed successfully"},
-        400: {"model": ErrorDetail, "description": "Invalid request"},
+        400: {"model": ErrorDetail, "description": "Invalid request or rejected by guardrails"},
         503: {"model": ErrorDetail, "description": "Query failed"},
     },
 )
 async def rag_query(
     request: QueryRequest,
+    rerank: bool = Query(default=False, description="Rerank hits with a cross-encoder"),
+    enhance: bool = Query(default=False, description="Also search LLM query expansions"),
     service: RAGService = Depends(get_rag_service),
+    user: UserContext = Depends(get_user_context),
 ) -> QueryResponse:
     """
-    Execute full RAG query pipeline.
+    Execute the retrieval step of RAG through the safety pipeline.
 
-    Pipeline:
-    1. Embed the user query
-    2. Search vector store for similar chunks
-    3. Return relevant chunks with metadata for LLM context
-
-    This is the primary RAG endpoint used for context retrieval.
+    Same pipeline as /search (guardrails, optional enhancement, access control,
+    optional reranking, PII masking) without a similarity threshold. Returns the
+    context passages for the LLM; answer generation happens in the agent layer.
 
     Args:
         request: QueryRequest with query text and optional top_k
+        rerank: Rerank with the cross-encoder
+        enhance: Expand the query with the LLM
         service: RAGService instance (injected)
+        user: Caller identity (injected from headers)
 
     Returns:
         QueryResponse with search results and latency
 
     Raises:
-        HTTPException (400): If query is empty or top_k invalid
+        HTTPException (400): If query is invalid or rejected by guardrails
         HTTPException (503): If query execution fails
     """
     try:
-        result = await service.rag_query(
+        result = await secure_retrieve(
+            service,
             query=request.query,
+            user=user,
             top_k=request.top_k,
+            rerank=rerank,
+            enhance=enhance,
         )
 
         logger.info(
@@ -460,6 +563,8 @@ async def rag_query(
         )
 
         return QueryResponse(**result)
+    except QueryRejectedError as e:
+        raise _rejected(e) from e
     except ValueError as e:
         logger.warning("Query request validation failed: %s", e)
         raise HTTPException(
@@ -541,32 +646,84 @@ async def list_collections(
 
 
 # ============================================================================
+# ENDPOINT 7: Verify Answer
+# ============================================================================
+
+
+@router.post(
+    "/verify",
+    response_model=VerifyResponse,
+    summary="Citation and Hallucination Check",
+    tags=["rag"],
+    responses={
+        200: {"description": "Answer assessed"},
+        400: {"model": ErrorDetail, "description": "Invalid request"},
+    },
+)
+async def verify(request: VerifyRequest) -> VerifyResponse:
+    """
+    Check an LLM answer against the passages it was given.
+
+    Maps each sentence of the answer to supporting sources, computes an overall
+    grounding confidence, and scores hallucination risk. With no sources the
+    answer is reported as high risk. Runs offline; no provider call is made.
+
+    Raises:
+        HTTPException (400): If the answer is blank
+    """
+    try:
+        result = await verify_answer(
+            request.query,
+            request.answer,
+            [(s.doc_id, s.title or s.doc_id, s.text, s.score) for s in request.sources],
+        )
+        return VerifyResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+def _rejected(error: QueryRejectedError) -> HTTPException:
+    return HTTPException(
+        status_code=400,
+        detail={
+            "message": str(error),
+            "risk_level": error.risk_level,
+            "violations": error.violations,
+        },
+    )
+
+
+# ============================================================================
 # Router Summary
 # ============================================================================
 
 """
-Router Summary:
-- POST /api/rag/health - Service health check
-- POST /api/rag/embed - Generate embeddings
-- POST /api/rag/ingest - Ingest documents
-- POST /api/rag/search - Semantic search
-- POST /api/rag/query - Full RAG pipeline
-- GET /api/rag/collections - List collections
+Router Summary (mounted at /rag):
+- POST /rag/health - Service health check
+- POST /rag/embed - Generate embeddings
+- POST /rag/ingest - Ingest documents with access metadata
+- POST /rag/search - Safe semantic search (?rerank=true, ?enhance=true)
+- POST /rag/query - Safe retrieval for RAG (?rerank=true, ?enhance=true)
+- GET /rag/collections - List collections
+- POST /rag/verify - Citation and hallucination check
 
 All endpoints use dependency injection with @lru_cache singleton pattern
 for RAGService initialization (ADR-010).
 
 Configuration:
-- RAG_EMBEDDING_PROVIDER: "openai" or "nvidia" (default: "openai")
-- RAG_EMBEDDING_MODEL: Model name (e.g., "gpt-4", "nvidia/nemotron-3.5-embed-1b")
-- RAG_EMBEDDING_KEY: API key for embedding provider
-- RAG_VECTOR_STORE_URL: Qdrant endpoint
-- RAG_VECTOR_STORE_API_KEY: Qdrant API key
+- RAG_EMBEDDING_PROVIDER: "openai" (default; the only provider wired here)
+- RAG_EMBEDDING_KEY or OPENAI_API_KEY: API key for the embedding provider
+- RAG_VECTOR_STORE_URL or QDRANT_URL: Qdrant endpoint
+- RAG_VECTOR_STORE_API_KEY or QDRANT_API_KEY: Qdrant API key
+- RAG_VECTOR_STORE_DISTANCE_METRIC: cosine (default), euclidean, manhattan
+
+Identity headers: X-User-Id, X-User-Role, X-Organization-Id (trusted; set by gateway).
 
 Error Handling:
-- 400: Invalid request (validation failure, empty input, etc.)
-- 401: Authentication failure (invalid credentials)
-- 503: Service unavailable (provider unreachable)
+- 400: Invalid request or query rejected by guardrails
+- 403: Ingestion not permitted for the caller
+- 422: Request schema validation failure
+- 503: Service unavailable (provider unreachable, PII masking unavailable)
 
 All responses include latency_ms for observability.
 """

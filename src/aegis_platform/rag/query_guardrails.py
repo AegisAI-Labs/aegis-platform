@@ -4,11 +4,11 @@ This module provides security validation and sanitization for RAG queries,
 protecting against:
 - SQL injection attacks
 - Prompt injection attacks
-- Malicious query patterns
+- Shell command injection attacks
 - Query length exploitation
 
-The guardrails enforce a whitelist-based approach, validating that queries
-conform to expected patterns before processing.
+SQL checks match statement shapes (``DROP TABLE``, ``UNION SELECT``, ``' OR '1'='1``)
+rather than bare keywords, so ordinary questions are not blocked.
 """
 
 import logging
@@ -29,7 +29,7 @@ class GuardrailsConfig:
         max_query_tokens: Maximum allowed query tokens (approximate)
         block_sql_patterns: Whether to block SQL injection patterns
         block_prompt_patterns: Whether to block prompt injection patterns
-        allow_special_chars: Set of allowed special characters
+        block_command_patterns: Whether to block shell command injection patterns
     """
 
     enabled: bool = True
@@ -37,7 +37,7 @@ class GuardrailsConfig:
     max_query_tokens: int = 2000
     block_sql_patterns: bool = True
     block_prompt_patterns: bool = True
-    allow_special_chars: str = "!?.,;:'-\"()"
+    block_command_patterns: bool = True
 
 
 class GuardResult:
@@ -84,31 +84,50 @@ class QueryGuardrails:
     rather than trying to fix them.
     """
 
-    # SQL injection keywords to detect
-    SQL_INJECTION_KEYWORDS: ClassVar[set[str]] = {
-        "UNION",
-        "SELECT",
-        "INSERT",
-        "UPDATE",
-        "DELETE",
-        "DROP",
-        "CREATE",
-        "ALTER",
-        "TRUNCATE",
-        "EXEC",
-        "EXECUTE",
-        "SCRIPT",
-        "DECLARE",
-        "CAST",
-        "CONVERT",
-        "INFORMATION_SCHEMA",
-        "xp_",
-        "sp_",
-        "0x",
-        "char(",
-        "ascii(",
-        "substring(",
-    }
+    # SQL injection: statement shapes rather than bare keywords, so natural-language
+    # queries like "How do I select a model?" pass. (keyword, pattern) pairs.
+    SQL_INJECTION_PATTERNS: ClassVar[list[tuple[str, str]]] = [
+        ("UNION", r"\bunion\s+(?:all\s+)?select\b"),
+        ("SELECT", r"\bselect\s+(?:\*|distinct\b|count\s*\(|[\w.]+\s*,\s*[\w.]+\s+from\b)"),
+        ("SELECT", r"\bselect\b.+\bfrom\b.+\bwhere\b"),
+        ("INSERT", r"\binsert\s+into\b"),
+        ("UPDATE", r"\bupdate\s+[\w.]+\s+set\b"),
+        ("DELETE", r"\bdelete\s+from\b"),
+        ("DROP", r"\bdrop\s+(?:table|database|schema|view|index|user)\b"),
+        ("TRUNCATE", r"\btruncate\s+table\b"),
+        ("ALTER", r"\balter\s+(?:table|database|user)\b"),
+        ("CREATE", r"\bcreate\s+(?:table|database|user|procedure|function)\s+[\w.]+\s*(?:\(|;|$)"),
+        ("EXEC", r"\bexec(?:ute)?\s*(?:\(|xp_|sp_)|\bxp_cmdshell\b"),
+        ("INFORMATION_SCHEMA", r"\binformation_schema\b"),
+        ("SLEEP", r"\bwaitfor\s+delay\b|\bsleep\s*\(\s*\d|\bbenchmark\s*\("),
+        ("CHAR", r"\bchar\s*\(\s*\d"),
+    ]
+
+    # Comment markers only count when they terminate an injected string or statement.
+    SQL_COMMENT_PATTERN: ClassVar[str] = r"['\";)]\s*(?:--|#)|/\*.*?\*/"
+
+    # Classic tautologies: ' OR '1'='1, ' OR 1=1, OR 1=1
+    SQL_TAUTOLOGY_PATTERN: ClassVar[str] = (
+        r"'\s*(?:or|and)\s+'?\w+'?\s*(?:=|like)\s*'?\w+|\bor\s+(\d+)\s*=\s*\1\b"
+    )
+
+    # Shell command injection: a separator or substitution followed by a command,
+    # destructive flags, and sensitive system paths.
+    SHELL_COMMANDS: ClassVar[str] = (
+        r"rm|curl|wget|chmod|chown|sh|bash|zsh|nc|ncat|netcat|python\d*|perl|ruby|php|"
+        r"powershell|pwsh|cmd|del|shutdown|reboot|kill|cat|mkfifo|dd|scp|ssh|eval|exec"
+    )
+    COMMAND_INJECTION_PATTERNS: ClassVar[list[tuple[str, str]]] = [
+        (
+            "shell command after separator",
+            rf"(?:;|&&|\|\||\||`|\$\()\s*(?:sudo\s+)?(?:{SHELL_COMMANDS})\b",
+        ),
+        ("command substitution", r"\$\(\s*\w+[^)]*\)"),
+        ("destructive rm flags", r"\brm\s+-[a-z]*[rf]"),
+        ("sensitive system file", r"/etc/(?:passwd|shadow|sudoers)\b"),
+        ("path traversal", r"(?:\.\./){2,}"),
+        ("network redirect", r">\s*/dev/(?:tcp|udp)/"),
+    ]
 
     # Prompt injection patterns
     PROMPT_INJECTION_PATTERNS: ClassVar[list[str]] = [
@@ -187,6 +206,12 @@ class QueryGuardrails:
                 # Prompt injection is HIGH risk (not MEDIUM)
                 risk_level = "HIGH"
 
+        if self.config.block_command_patterns:
+            command_violations = self._check_command_injection(query)
+            if command_violations:
+                violations.extend(command_violations)
+                risk_level = "HIGH"
+
         # Check for null bytes and control characters
         if "\x00" in query or any(ord(c) < 32 and c not in "\t\n\r" for c in query):
             violations.append("Query contains control characters")
@@ -216,30 +241,37 @@ class QueryGuardrails:
         Returns:
             List of detected SQL injection violations
         """
-        violations = []
-        query_upper = query.upper()
+        violations: list[str] = []
+        flags = re.IGNORECASE | re.DOTALL
 
-        for keyword in self.SQL_INJECTION_KEYWORDS:
-            # Look for SQL keywords with word boundaries or special patterns
-            if keyword.endswith("_"):
-                # For patterns like xp_, sp_, check for exact match
-                if keyword in query_upper:
-                    violations.append(f"Detected SQL pattern: {keyword}")
-            else:
-                # For keywords, use word boundaries
-                pattern = rf"\b{re.escape(keyword)}\b"
-                if re.search(pattern, query_upper):
-                    violations.append(f"Detected SQL keyword: {keyword}")
+        detected: list[str] = []
+        for keyword, pattern in self.SQL_INJECTION_PATTERNS:
+            if keyword not in detected and re.search(pattern, query, flags):
+                detected.append(keyword)
+        violations.extend(f"Detected SQL keyword: {keyword}" for keyword in detected)
 
-        # Check for SQL comment patterns
-        if re.search(r"--|/\*|\*/|#", query):
+        if re.search(self.SQL_COMMENT_PATTERN, query, flags):
             violations.append("Detected SQL comment patterns")
 
-        # Check for escape sequences
-        if re.search(r"'.*'.*'", query):  # Multiple quotes
-            violations.append("Detected suspicious quote patterns")
+        if re.search(self.SQL_TAUTOLOGY_PATTERN, query, flags):
+            violations.append("Detected SQL tautology pattern")
 
         return violations
+
+    def _check_command_injection(self, query: str) -> list[str]:
+        """Check for shell command injection patterns.
+
+        Args:
+            query: Query text to check
+
+        Returns:
+            List of detected command injection violations
+        """
+        return [
+            f"Detected command injection pattern: {name}"
+            for name, pattern in self.COMMAND_INJECTION_PATTERNS
+            if re.search(pattern, query, re.IGNORECASE)
+        ]
 
     def _check_prompt_injection(self, query: str) -> list[str]:
         """Check for prompt injection patterns.
@@ -283,7 +315,9 @@ class QueryGuardrails:
 
         # Remove SQL comments if blocking SQL patterns
         if self.config.block_sql_patterns:
-            sanitized = re.sub(r"--|/\*.*?\*/|#.*?$", " ", sanitized, flags=re.MULTILINE)
+            sanitized = re.sub(
+                r"--|/\*.*?\*/|(?<=['\";])\s*#.*?$", " ", sanitized, flags=re.MULTILINE
+            )
 
         # Normalize whitespace
         sanitized = " ".join(sanitized.split())

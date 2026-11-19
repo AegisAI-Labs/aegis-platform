@@ -28,10 +28,12 @@ logger = logging.getLogger(__name__)
 try:
     from presidio_analyzer import AnalyzerEngine  # type: ignore
     from presidio_anonymizer import AnonymizerEngine  # type: ignore
+    from presidio_anonymizer.entities import OperatorConfig  # type: ignore
 except ImportError:
     # Engines will be None if Presidio is not installed; __init__ will raise
     AnalyzerEngine = None  # type: ignore
     AnonymizerEngine = None  # type: ignore
+    OperatorConfig = None  # type: ignore
 
 
 @dataclass
@@ -41,14 +43,16 @@ class PIIConfig:
     Attributes:
         enabled: Whether PII detection is enabled
         mask_char: Character/string to use for masking (default: "[REDACTED]")
-        confidence_threshold: Confidence threshold for detection (0.0-1.0)
+        confidence_threshold: Minimum Presidio score (0.0-1.0) for an entity to be
+            detected or masked. Presidio scores pattern-only matches such as phone
+            numbers at 0.4, so higher values silently skip them.
         detect_names: Whether to detect names (may cause false positives)
         detect_addresses: Whether to detect addresses (may cause false positives)
     """
 
     enabled: bool = True
     mask_char: str = "[REDACTED]"
-    confidence_threshold: float = 0.75
+    confidence_threshold: float = 0.4
     detect_names: bool = False
     detect_addresses: bool = False
 
@@ -234,20 +238,18 @@ class PIIDetector:
 
         try:
             entities = self.get_supported_entities()
+            analyzer_results = [
+                result
+                for result in self.analyzer.analyze(text=text, entities=entities, language="en")
+                if result.score >= self.config.confidence_threshold
+            ]
+            replace = OperatorConfig("replace", {"new_value": self.config.mask_char})
             anonymized = self.anonymizer.anonymize(
                 text=text,
-                analyzer_results=self.analyzer.analyze(
-                    text=text,
-                    entities=entities,
-                    language="en",
-                ),
-                operators={
-                    entity: {
-                        "type": "replace",
-                        "new_value": self.config.mask_char,
-                    }
-                    for entity in entities
-                },
+                # Presidio's analyzer and anonymizer declare separate RecognizerResult
+                # classes; the anonymizer accepts analyzer results at runtime.
+                analyzer_results=analyzer_results,  # type: ignore[arg-type]
+                operators={"DEFAULT": replace},
             )
 
             masked_text = anonymized.text
@@ -261,11 +263,10 @@ class PIIDetector:
 
             return masked_text
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
+            # Fail closed: returning the original text here would leak the PII.
             logger.error("PII masking failed: %s", e)
-            # Fail gracefully - return original text if masking fails
-            logger.warning("Returning original text due to masking error")
-            return text
+            raise RuntimeError(f"PII masking failed: {e}") from e
 
     def mask_pii_in_dict(self, data: dict, keys_to_mask: list[str] | None = None) -> dict:
         """Mask PII in dictionary values.
@@ -277,21 +278,17 @@ class PIIDetector:
 
         Returns:
             Dictionary with PII masked in specified keys
+
+        Raises:
+            RuntimeError: If masking any value fails
         """
-        try:
-            result = {}
-            for key, value in data.items():
-                if isinstance(value, str):
-                    if keys_to_mask is None or key in keys_to_mask:
-                        result[key] = self.mask_pii(value)
-                    else:
-                        result[key] = value
-                else:
-                    result[key] = value
-            return result
-        except Exception as e:  # noqa: BLE001
-            logger.error("Dictionary PII masking failed: %s", e)
-            return data
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, str) and value and (keys_to_mask is None or key in keys_to_mask):
+                result[key] = self.mask_pii(value)
+            else:
+                result[key] = value
+        return result
 
     async def async_detect_pii(self, text: str) -> list[PII]:
         """Async wrapper for PII detection.

@@ -2,6 +2,18 @@
 
 This folder contains Python experiment scripts that validate and analyze various aspects of the Aegis Platform implementation.
 
+## RAG Safety Pipeline Example
+
+**File:** `rag_safety_pipeline_example.py`
+
+Runs all seven RAG safety layers (guardrails, query enhancement, access control, retrieval, reranking, citations with hallucination detection, PII masking) against an in-memory corpus. No Qdrant or embedding provider needed; query enhancement runs only when `OPENAI_API_KEY` is set.
+
+```powershell
+uv run python scripts/rag_safety_pipeline_example.py
+```
+
+See [docs/GUIDES/RAG-SAFETY-USAGE.md](../docs/GUIDES/RAG-SAFETY-USAGE.md).
+
 ## Day 10: Embedding Provider & Vector Store Experiment
 
 **File:** `day10_embedding_vectorstore_experiment.py`
@@ -114,8 +126,8 @@ The script produces:
 ### Related Documentation
 
 - [Day 10 Embedding & Vector Store Analysis](../experiments/day10-embedding-vectorstore-analysis.md)
-- [RFC-009: RAG Architecture](../docs/AEGIS-RFC-009.md)
-- [SRS-001: RAG Requirements](../docs/AEGIS-SRS-001.md)
+- [RFC-009: RAG Architecture](../docs/RFC/AEGIS-RFC-009-RAG-Architecture.md)
+- [SRS-001: RAG Requirements](../docs/SRS/AEGIS-SRS-001.md)
 
 ---
 

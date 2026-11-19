@@ -1,12 +1,8 @@
 """Pytest configuration for RAG unit tests."""
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Mock sentence_transformers before any test imports it
-sys.modules["sentence_transformers"] = MagicMock()
 
 
 @pytest.fixture

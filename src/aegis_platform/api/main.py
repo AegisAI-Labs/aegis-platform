@@ -1,5 +1,6 @@
 import json
 
+from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
@@ -26,6 +27,11 @@ from aegis_platform.observability.retry_telemetry import (
 )
 
 app = FastAPI(title="Aegis AI Platform")
+
+# Export .env to os.environ: the RAG router and the OpenAI SDK read the environment
+# directly. Like Settings, the file is found from the working directory; variables
+# already set in the environment take precedence.
+load_dotenv(find_dotenv(usecwd=True))
 
 # Include RAG router
 app.include_router(rag_router, prefix="/rag", tags=["RAG"])

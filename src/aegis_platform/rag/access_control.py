@@ -212,27 +212,46 @@ class DocumentAccessControl:
 
         doc = self.document_registry[doc_id]
 
-        # Multi-tenant check: users can only access docs in their organization
-        if (
-            user.organization_id
-            and doc.organization_id
-            and user.organization_id != doc.organization_id
-        ):
-            result = AccessCheckResult(
-                is_allowed=False,
-                reason="User organization does not have access to this document",
-                risk_level="medium",
-            )
-            await self._log_access_attempt(user, doc_id, operation, result)
-            return result
-
-        # Check access based on access level
-        result = self._check_access_by_level(user, doc, operation)
+        result = self.evaluate(user, doc, operation)
 
         # Log the access attempt
         await self._log_access_attempt(user, doc_id, operation, result)
 
         return result
+
+    def evaluate(
+        self, user: UserContext, doc: DocumentMetadata, operation: str = "read"
+    ) -> AccessCheckResult:
+        """Decide access for a document without consulting the registry.
+
+        Applies the multi-tenant check, then the access-level rules. Use this when
+        document metadata travels with the data (e.g. vector store payloads).
+
+        Args:
+            user: User context
+            doc: Document metadata
+            operation: Operation type (read, write, delete)
+
+        Returns:
+            AccessCheckResult with access decision (not audit-logged)
+        """
+        if not self.config.enabled:
+            return AccessCheckResult(
+                is_allowed=True, reason="Access control disabled", risk_level="low"
+            )
+
+        if (
+            user.organization_id
+            and doc.organization_id
+            and user.organization_id != doc.organization_id
+        ):
+            return AccessCheckResult(
+                is_allowed=False,
+                reason="User organization does not have access to this document",
+                risk_level="medium",
+            )
+
+        return self._check_access_by_level(user, doc, operation)
 
     async def check_access_batch(
         self, user: UserContext, doc_ids: list[str]
@@ -277,17 +296,7 @@ class DocumentAccessControl:
 
             doc = self.document_registry[doc_id]
 
-            # Check multi-tenant
-            if (
-                user.organization_id
-                and doc.organization_id
-                and user.organization_id != doc.organization_id
-            ):
-                continue
-
-            # Check access level
-            access_result = self._check_access_by_level(user, doc, "read")
-            if access_result.is_allowed:
+            if self.evaluate(user, doc, "read").is_allowed:
                 filtered.append(result)
 
         logger.info(
@@ -319,17 +328,7 @@ class DocumentAccessControl:
             if len(accessible) >= limit:
                 break
 
-            # Multi-tenant check
-            if (
-                user.organization_id
-                and doc.organization_id
-                and user.organization_id != doc.organization_id
-            ):
-                continue
-
-            # Access check
-            result = self._check_access_by_level(user, doc, "read")
-            if result.is_allowed:
+            if self.evaluate(user, doc, "read").is_allowed:
                 accessible.append(doc)
 
         logger.info(

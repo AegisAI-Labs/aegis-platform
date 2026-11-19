@@ -40,6 +40,8 @@ jobs:
 
       # Tests
       - name: Pytest
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           uv run pytest
 

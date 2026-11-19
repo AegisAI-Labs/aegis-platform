@@ -68,6 +68,12 @@ Aegis aims to solve these problems through a platform-first architecture.
 - [ ] Kafka
 - [ ] Kubernetes
 
+### RAG Documentation
+
+- [RAG API reference](docs/API/AEGIS-API-RAG.md) — `/rag` endpoints and the safety module APIs
+- [RAG safety configuration](docs/GUIDES/RAG-SAFETY-CONFIGURATION.md) — installation, settings, troubleshooting
+- [RAG safety usage](docs/GUIDES/RAG-SAFETY-USAGE.md) — runnable examples for each safety layer
+
 ---
 
 ## Repository Structure

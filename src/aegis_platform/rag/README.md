@@ -422,6 +422,24 @@ uv run ruff check src/aegis_platform/rag/
 - Similarity search
 - Result reranking (optional)
 
+## Safety Layers
+
+The module also provides safety layers that are composed around retrieval:
+
+| Layer | Module |
+|---|---|
+| Query guardrails | `query_guardrails.py` |
+| Query enhancement | `llm_query_enhancer.py`, `query_enhancer_base.py` |
+| Document access control (RBAC, multi-tenant) | `access_control.py` |
+| Cross-encoder reranking | `cross_encoder_reranker.py`, `reranker_base.py` |
+| Citation tracking | `citation_tracker.py` |
+| Hallucination detection | `hallucination_detector.py` |
+| PII detection and masking | `pii_detector.py` |
+
+See the [API reference](../../../docs/API/AEGIS-API-RAG.md),
+[configuration guide](../../../docs/GUIDES/RAG-SAFETY-CONFIGURATION.md) and
+[usage guide](../../../docs/GUIDES/RAG-SAFETY-USAGE.md).
+
 ## References
 
 - [LangChain Text Splitters](https://python.langchain.com/docs/modules/data_connection/document_loaders/split_documents)

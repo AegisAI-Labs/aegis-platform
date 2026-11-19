@@ -1,79 +1,109 @@
-"""Pytest configuration for integration tests."""
+"""Pytest configuration for integration tests.
 
-import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+Presidio and the cross-encoder run for real here; only the LLM call is faked so
+the suite needs no API key. Tests that need a real library are skipped (with the
+reason shown) when it cannot be loaded, e.g. the reranker model download fails.
+"""
+
+from collections.abc import Iterator
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-# Mock sentence_transformers before any test imports it
-sys.modules["sentence_transformers"] = MagicMock()
+from aegis_platform.rag.access_control import (
+    AccessLevel,
+    DocumentAccessControl,
+    DocumentMetadata,
+    Role,
+)
+from aegis_platform.rag.cross_encoder_reranker import CrossEncoderReranker
+from aegis_platform.rag.llm_query_enhancer import (
+    LLMQueryEnhancer,
+    reset_llm_query_enhancer_instance,
+)
+from aegis_platform.rag.pii_detector import PIIDetector
+
+FAKE_EXPANSIONS = "1. data protection\n2. information security\n3. security controls"
+
+CORPUS = [
+    DocumentMetadata(
+        doc_id="public_doc",
+        title="Cafeteria",
+        access_level=AccessLevel.PUBLIC,
+        organization_id="org_123",
+    ),
+    DocumentMetadata(
+        doc_id="internal_doc",
+        title="Security Handbook",
+        access_level=AccessLevel.INTERNAL,
+        organization_id="org_123",
+    ),
+    DocumentMetadata(
+        doc_id="analyst_doc",
+        title="Data Classification",
+        access_level=AccessLevel.RESTRICTED,
+        allowed_roles=[Role.ANALYST],
+        organization_id="org_123",
+    ),
+    DocumentMetadata(
+        doc_id="restricted_doc",
+        title="Board Minutes",
+        access_level=AccessLevel.RESTRICTED,
+        allowed_roles=[Role.ADMIN],
+        organization_id="org_123",
+    ),
+    DocumentMetadata(
+        doc_id="confidential_doc",
+        title="Incident Postmortem",
+        access_level=AccessLevel.CONFIDENTIAL,
+        organization_id="org_123",
+    ),
+    DocumentMetadata(
+        doc_id="org_b_doc",
+        title="Org B Security Plan",
+        access_level=AccessLevel.INTERNAL,
+        organization_id="org_b",
+    ),
+]
+
+
+@pytest.fixture(scope="session")
+def pii_detector() -> PIIDetector:
+    """Real Presidio-backed detector (not the shared singleton)."""
+    try:
+        return PIIDetector()
+    except (ImportError, OSError) as e:
+        pytest.skip(f"Presidio or spaCy model unavailable: {e}")
+
+
+@pytest.fixture(scope="session")
+def reranker() -> CrossEncoderReranker:
+    """Real cross-encoder reranker with the model loaded once per session."""
+    instance = CrossEncoderReranker()
+    try:
+        instance._ensure_model_loaded()
+    except (ImportError, RuntimeError) as e:
+        pytest.skip(f"Cross-encoder model unavailable: {e}")
+    return instance
 
 
 @pytest.fixture
-def mock_llm_provider():
-    """Mock LLM provider for integration tests."""
-    mock_client = AsyncMock()
-
-    # Mock OpenAI response
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[
-        0
-    ].message.content = "Query expansion: security practices, data protection, encryption methods"
-
-    async def mock_create(*args, **kwargs):
-        return mock_response
-
-    mock_client.chat.completions.create = mock_create
-
-    with patch("aegis_platform.rag.llm_query_enhancer.AsyncOpenAI", return_value=mock_client):
-        yield mock_client
+def fake_llm() -> Iterator[AsyncMock]:
+    """Replace the enhancer's LLM call with a deterministic response."""
+    reset_llm_query_enhancer_instance()
+    with patch.object(
+        LLMQueryEnhancer, "_call_llm", new=AsyncMock(return_value=FAKE_EXPANSIONS)
+    ) as mock_call:
+        yield mock_call
+    reset_llm_query_enhancer_instance()
 
 
 @pytest.fixture
-def mock_embeddings_provider():
-    """Mock embeddings provider for integration tests."""
-    mock_client = AsyncMock()
-
-    # Mock embedding response
-    async def mock_embed(*args, **kwargs):
-        return [0.1, 0.2, 0.3, 0.4, 0.5] * 24  # 120-dim embedding
-
-    mock_client.embed = mock_embed
-
-    with patch("aegis_platform.rag.llm_query_enhancer.AsyncOpenAI"):
-        yield mock_client
-
-
-@pytest.fixture(autouse=True)
-def mock_presidio():
-    """Mock Presidio engines for integration tests."""
-    with (
-        patch("aegis_platform.rag.pii_detector.AnalyzerEngine") as mock_analyzer_class,
-        patch("aegis_platform.rag.pii_detector.AnonymizerEngine") as mock_anonymizer_class,
-    ):
-        # Create instances
-        mock_analyzer_instance = MagicMock()
-        mock_anonymizer_instance = MagicMock()
-
-        # Configure classes to return instances
-        mock_analyzer_class.return_value = mock_analyzer_instance
-        mock_anonymizer_class.return_value = mock_anonymizer_instance
-
-        # Configure analyzer.analyze() to return PII detection results
-        mock_analyzer_instance.analyze.return_value = [
-            MagicMock(entity_type="CREDIT_CARD"),
-            MagicMock(entity_type="SSN"),
-        ]
-
-        # Configure anonymizer.anonymize() to return an object with a text attribute
-        mock_anonymize_result = MagicMock()
-        mock_anonymize_result.text = "Call me at [PHONE_NUMBER] for support"
-        mock_anonymizer_instance.anonymize.return_value = mock_anonymize_result
-
-        yield {
-            "analyzer": mock_analyzer_class,
-            "anonymizer": mock_anonymizer_class,
-            "analyzer_instance": mock_analyzer_instance,
-            "anonymizer_instance": mock_anonymizer_instance,
-        }
+def acl() -> Iterator[DocumentAccessControl]:
+    """Fresh access-control singleton with the test corpus registered."""
+    DocumentAccessControl.reset_instance()
+    instance = DocumentAccessControl.get_instance()
+    for doc in CORPUS:
+        instance.register_document(doc)
+    yield instance
+    DocumentAccessControl.reset_instance()

@@ -165,6 +165,8 @@ class RAGService:
                 metadata_list.append(
                     {
                         "text": chunk.text,
+                        "chunk_id": chunk.chunk_id,
+                        "document_id": chunk.doc_id,
                         "doc_id": chunk.doc_id,
                         "sequence": chunk.sequence,
                         "metadata": chunk.metadata or {},
