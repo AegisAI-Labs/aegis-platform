@@ -30,6 +30,7 @@ class Chunk:
 
     text: str
     chunk_id: str
+    doc_id: str
     sequence: int
     start_pos: int
     end_pos: int

@@ -120,6 +120,7 @@ class LangChainRecursiveChunker(ChunkingStrategy):
                 Chunk(
                     text=chunk_text.strip(),
                     chunk_id=f"{document_id}#{chunk_id}",
+                    doc_id=document_id,
                     sequence=chunk_id,
                     start_pos=start_pos,
                     end_pos=end_pos,

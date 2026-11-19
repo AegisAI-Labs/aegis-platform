@@ -4,7 +4,8 @@ Request/response models for embedding, ingestion, search, and query operations.
 All models include validation rules and documentation.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -13,7 +14,7 @@ class DocumentInput(BaseModel):
 
     doc_id: str = Field(..., description="Unique document identifier")
     content: str = Field(..., description="Document content")
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None, description="Document metadata (source, type, etc.)"
     )
 
@@ -53,7 +54,7 @@ class EmbedRequest(BaseModel):
 class EmbedResponse(BaseModel):
     """Response with text embedding."""
 
-    embedding: List[float] = Field(..., description="Vector embedding")
+    embedding: list[float] = Field(..., description="Vector embedding")
     dimension: int = Field(..., description="Embedding dimension")
     latency_ms: float = Field(..., description="Embedding latency in milliseconds", ge=0)
 
@@ -61,11 +62,11 @@ class EmbedResponse(BaseModel):
 class IngestRequest(BaseModel):
     """Request to ingest documents."""
 
-    documents: List[DocumentInput] = Field(
+    documents: list[DocumentInput] = Field(
         ...,
         description="Documents to ingest",
-        min_items=1,
-        max_items=100,
+        min_length=1,
+        max_length=100,
     )
 
 
@@ -88,7 +89,7 @@ class SearchResult(BaseModel):
         ge=0.0,
         le=1.0,
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Chunk metadata",
     )
@@ -104,7 +105,7 @@ class SearchRequest(BaseModel):
         ge=1,
         le=100,
     )
-    similarity_threshold: Optional[float] = Field(
+    similarity_threshold: float | None = Field(
         default=None,
         description="Minimum similarity score (0.0-1.0)",
         ge=0.0,
@@ -123,7 +124,7 @@ class SearchRequest(BaseModel):
 class SearchResponse(BaseModel):
     """Response with search results."""
 
-    results: List[SearchResult] = Field(
+    results: list[SearchResult] = Field(
         default_factory=list,
         description="Search results ranked by similarity",
     )
@@ -157,7 +158,7 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     """Response with RAG query results."""
 
-    results: List[SearchResult] = Field(
+    results: list[SearchResult] = Field(
         default_factory=list,
         description="Query results with context passages",
     )
@@ -180,7 +181,7 @@ class CollectionInfo(BaseModel):
 class CollectionsResponse(BaseModel):
     """Response with list of collections."""
 
-    collections: List[CollectionInfo] = Field(
+    collections: list[CollectionInfo] = Field(
         default_factory=list,
         description="Available collections",
     )
@@ -203,4 +204,4 @@ class ErrorDetail(BaseModel):
     """Error response detail."""
 
     detail: str = Field(..., description="Error message")
-    error_code: Optional[str] = Field(None, description="Error code for programmatic handling")
+    error_code: str | None = Field(None, description="Error code for programmatic handling")

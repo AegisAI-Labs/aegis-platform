@@ -15,25 +15,25 @@ import logging
 import os
 from functools import lru_cache
 
-from fastapi import APIRouter, Depends, HTTPException
 import numpy as np
+from fastapi import APIRouter, Depends, HTTPException
 
-from aegis_platform.rag.service import RAGService
-from aegis_platform.rag.schemas import (
-    EmbedRequest,
-    EmbedResponse,
-    IngestRequest,
-    IngestResponse,
-    SearchRequest,
-    SearchResponse,
-    QueryRequest,
-    QueryResponse,
-    HealthCheckResponse,
-    CollectionsResponse,
-    ErrorDetail,
-)
 from aegis_platform.rag.models import Document
 from aegis_platform.rag.protocols import EmbeddingProvider, VectorStore
+from aegis_platform.rag.schemas import (
+    CollectionsResponse,
+    EmbedRequest,
+    EmbedResponse,
+    ErrorDetail,
+    HealthCheckResponse,
+    IngestRequest,
+    IngestResponse,
+    QueryRequest,
+    QueryResponse,
+    SearchRequest,
+    SearchResponse,
+)
+from aegis_platform.rag.service import RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +54,21 @@ def get_configured_embedding_provider() -> EmbeddingProvider:
     Raises:
         ValueError: If provider is unknown or configuration invalid
     """
+    from aegis_platform.rag.embeddings import OpenAIEmbeddingConfig
     from aegis_platform.rag.provider_factory import (
-        get_embedding_provider,
+        create_embedding_provider,
     )
 
     provider_name = os.getenv("RAG_EMBEDDING_PROVIDER", "openai").lower()
-    return get_embedding_provider(provider_name)
+
+    if provider_name == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set")
+        config = OpenAIEmbeddingConfig(api_key=api_key)
+        return create_embedding_provider(config)
+    else:
+        raise ValueError(f"Unknown embedding provider: {provider_name}")
 
 
 def get_configured_vector_store() -> VectorStore:
@@ -76,10 +85,19 @@ def get_configured_vector_store() -> VectorStore:
         ValueError: If vector store is unknown or configuration invalid
     """
     from aegis_platform.rag.provider_factory import (
-        get_vector_store,
+        create_vector_store,
     )
+    from aegis_platform.rag.storage import QdrantVectorStoreConfig
 
-    return get_vector_store("qdrant")
+    store_type = os.getenv("RAG_VECTOR_STORE", "qdrant").lower()
+
+    if store_type == "qdrant":
+        url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        api_key = os.getenv("QDRANT_API_KEY")
+        config = QdrantVectorStoreConfig(url=url, api_key=api_key)
+        return create_vector_store(config)
+    else:
+        raise ValueError(f"Unknown vector store: {store_type}")
 
 
 @lru_cache(maxsize=1)
@@ -274,8 +292,10 @@ async def ingest_documents(
         # Convert DocumentInput objects to Document domain model
         documents = [
             Document(
-                doc_id=doc.doc_id,
+                id=doc.doc_id,
+                title=doc.doc_id,  # Use doc_id as title
                 content=doc.content,
+                source="api",
                 metadata=doc.metadata or {},
             )
             for doc in request.documents

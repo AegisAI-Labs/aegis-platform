@@ -12,13 +12,13 @@ embedding providers through the EmbeddingProvider protocol.
 
 import logging
 import time
-from typing import List, Optional
+
 import numpy as np
 
-from aegis_platform.rag.models import Document
-from aegis_platform.rag.protocols import EmbeddingProvider, VectorStore
 from aegis_platform.rag.chunking import create_chunker
 from aegis_platform.rag.chunking.strategy import ChunkingConfig
+from aegis_platform.rag.models import Document
+from aegis_platform.rag.protocols import EmbeddingProvider, VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class RAGService:
         logger.debug("Embedding text of length %d", len(text))
 
         try:
-            embedding = await self.embedding_provider.embed(text)
+            embedding = await self.embedding_provider.embed_text(text)
             logger.debug("Successfully embedded text, dimension=%d", len(embedding))
             return embedding
         except Exception as e:
@@ -105,7 +105,7 @@ class RAGService:
 
     async def ingest_documents(
         self,
-        documents: List[Document],
+        documents: list[Document],
     ) -> dict:
         """
         Ingest documents: chunk, embed, and store in vector database.
@@ -133,8 +133,8 @@ class RAGService:
 
             # Chunk all documents
             for doc in documents:
-                logger.debug("Chunking document %s", doc.doc_id)
-                chunks = self.chunker.chunk(doc.content, doc.doc_id)
+                logger.debug("Chunking document %s", doc.id)
+                chunks = self.chunker.chunk(doc.content, doc.id)
 
                 # Enrich chunks with document metadata
                 for chunk in chunks:
@@ -153,25 +153,28 @@ class RAGService:
             logger.info("Generated embeddings for %d chunks", len(embeddings))
 
             # Prepare vectors for storage
-            vectors = []
+            vector_ids = []
+            vector_data = []
+            metadata_list = []
+
             for chunk, embedding in zip(all_chunks, embeddings):
-                vectors.append(
+                vector_ids.append(chunk.chunk_id)
+                vector_data.append(
+                    embedding.tolist() if isinstance(embedding, np.ndarray) else embedding
+                )
+                metadata_list.append(
                     {
-                        "id": chunk.chunk_id,
-                        "vector": embedding.tolist()
-                        if isinstance(embedding, np.ndarray)
-                        else embedding,
-                        "payload": {
-                            "text": chunk.text,
-                            "doc_id": chunk.doc_id,
-                            "sequence": chunk.sequence,
-                            "metadata": chunk.metadata or {},
-                        },
+                        "text": chunk.text,
+                        "doc_id": chunk.doc_id,
+                        "sequence": chunk.sequence,
+                        "metadata": chunk.metadata or {},
                     }
                 )
 
             # Store vectors in vector database
-            await self.vector_store.insert(vectors)
+            await self.vector_store.insert(
+                collection="documents", vectors=vector_data, metadata=metadata_list, ids=vector_ids
+            )
 
             latency_ms = (time.time() - start_time) * 1000
             logger.info(
@@ -195,7 +198,7 @@ class RAGService:
         self,
         query: str,
         top_k: int = 5,
-        similarity_threshold: Optional[float] = None,
+        similarity_threshold: float | None = None,
     ) -> dict:
         """
         Perform semantic similarity search on ingested documents.
@@ -228,23 +231,21 @@ class RAGService:
 
             # Search vector store
             search_results = await self.vector_store.search(
-                query_embedding.tolist()
+                collection="documents",
+                vector=query_embedding.tolist()
                 if isinstance(query_embedding, np.ndarray)
                 else query_embedding,
-                top_k=top_k,
+                limit=top_k,
+                score_threshold=similarity_threshold,
             )
-
-            # Filter by similarity threshold if provided
-            if similarity_threshold is not None:
-                search_results = [r for r in search_results if r["score"] >= similarity_threshold]
 
             # Format results
             results = [
                 {
-                    "chunk_id": result["id"],
-                    "text": result["payload"]["text"],
-                    "similarity_score": result["score"],
-                    "metadata": result["payload"].get("metadata", {}),
+                    "chunk_id": result.chunk_id,
+                    "text": result.text,
+                    "similarity_score": result.score,
+                    "metadata": result.metadata,
                 }
                 for result in search_results
             ]
@@ -333,9 +334,6 @@ class RAGService:
             await self.embed_text("health check")
             embedding_provider_name = type(self.embedding_provider).__name__
 
-            # Get provider config for model info
-            provider_config = self.embedding_provider.get_config()
-
             # Test vector store
             await self.vector_store.health_check()
             vector_store_name = type(self.vector_store).__name__
@@ -347,7 +345,7 @@ class RAGService:
             return {
                 "status": "healthy",
                 "embedding_provider": embedding_provider_name,
-                "embedding_model": getattr(provider_config, "model", "unknown"),
+                "embedding_model": "unknown",
                 "vector_store": vector_store_name,
                 "latency_ms": latency_ms,
             }
