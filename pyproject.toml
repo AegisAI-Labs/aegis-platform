@@ -13,7 +13,6 @@ dependencies = [
     "langchain-text-splitters>=0.1.0",
     "openai>=3.24.0",
     "pydantic-settings>=2.15.0",
-    "pytest-asyncio>=1.4.0",
     "uvicorn>=0.54.0",
     "qdrant-client>=1.20.0",
     "presidio-analyzer>=2.2.366",
@@ -37,6 +36,7 @@ dev = [
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.9"
 ]
 

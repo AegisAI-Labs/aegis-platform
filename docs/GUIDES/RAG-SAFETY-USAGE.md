@@ -65,7 +65,9 @@ from aegis_platform.rag.query_enhancer_base import EnhancementStrategy
 
 
 async def main() -> None:
-    enhancer = get_llm_query_enhancer(LLMQueryEnhancerConfig(model_name="gpt-4o-mini", temperature=0.2))
+    enhancer = get_llm_query_enhancer(
+        LLMQueryEnhancerConfig(model_name="gpt-4o-mini", temperature=0.2)
+    )
 
     expanded = await enhancer.enhance("key rotation policy", EnhancementStrategy.EXPANSION)
     print(expanded.expanded_queries)
@@ -118,10 +120,15 @@ acl.register_document(
         organization_id="acme",
     )
 )
-acl.register_document(DocumentMetadata(doc_id="globex-plan", title="Globex Plan", organization_id="globex"))
+acl.register_document(
+    DocumentMetadata(doc_id="globex-plan", title="Globex Plan", organization_id="globex")
+)
 
 alice = UserContext(user_id="alice", role=Role.ANALYST, organization_id="acme")
-hits = [{"doc_id": d, "score": 0.8} for d in ["handbook", "reviews", "postmortem", "globex-plan", "unknown"]]
+hits = [
+    {"doc_id": d, "score": 0.8}
+    for d in ["handbook", "reviews", "postmortem", "globex-plan", "unknown"]
+]
 
 print([h["doc_id"] for h in acl.filter_search_results(alice, hits)])
 # ['handbook', 'reviews']
@@ -154,15 +161,21 @@ from aegis_platform.rag.reranker_base import RawResult
 
 candidates = [
     RawResult(result_id="a", text="Bananas are a yellow fruit.", similarity_score=0.71),
-    RawResult(result_id="b", text="Encryption at rest protects stored data.", similarity_score=0.69),
+    RawResult(
+        result_id="b", text="Encryption at rest protects stored data.", similarity_score=0.69
+    ),
     RawResult(result_id="c", text="Rotate encryption keys every 90 days.", similarity_score=0.66),
 ]
 
 
 async def main() -> None:
-    ranked = await get_cross_encoder_reranker().rerank("How often should keys be rotated?", candidates, top_k=2)
+    ranked = await get_cross_encoder_reranker().rerank(
+        "How often should keys be rotated?", candidates, top_k=2
+    )
     for r in ranked:
-        print(f"{r.result_id}: rank {r.original_rank} -> {r.new_rank}, score {r.relevance_score:.4f}")
+        print(
+            f"{r.result_id}: rank {r.original_rank} -> {r.new_rank}, score {r.relevance_score:.4f}"
+        )
     # c: rank 3 -> 1, score 0.9997
     # a: rank 1 -> 2, score 0.0000
 
@@ -247,7 +260,9 @@ async def main() -> None:
     ]:
         citations = await tracker.extract_citations(answer, context)
         score = await detector.detect_hallucinations(answer, context, citations)
-        print(f"{score.risk_level:6} {score.risk_score:.2f} {[p.value for p in score.patterns_detected]}")
+        print(
+            f"{score.risk_level:6} {score.risk_score:.2f} {[p.value for p in score.patterns_detected]}"
+        )
         print(f"       {score.explanation}")
 
 
@@ -269,7 +284,9 @@ Mask retrieved passages and final answers before they leave the service or reach
 from aegis_platform.rag.pii_detector import PIIConfig, PIIDetector, get_pii_detector
 
 detector = get_pii_detector()
-text = "Reach Jane at jane.doe@example.com or 212-555-0123. SSN 536-90-4399, card 4111 1111 1111 1111."
+text = (
+    "Reach Jane at jane.doe@example.com or 212-555-0123. SSN 536-90-4399, card 4111 1111 1111 1111."
+)
 
 for pii in detector.detect_pii(text):
     print(pii.entity_type, pii.text, round(pii.confidence, 2))
@@ -306,22 +323,39 @@ import httpx
 
 headers = {"X-User-Id": "alice", "X-User-Role": "analyst", "X-Organization-Id": "acme"}
 with httpx.Client(base_url="http://localhost:8000", headers=headers, timeout=60) as client:
-    client.post("/rag/ingest", json={"documents": [
-        {"doc_id": "sec-101", "content": "Rotate encryption keys every 90 days. Contact sec@acme.com."},
-        {"doc_id": "sec-103", "content": "The breach exposed 1200 records.", "access_level": "confidential"},
-    ]}).raise_for_status()
+    client.post(
+        "/rag/ingest",
+        json={
+            "documents": [
+                {
+                    "doc_id": "sec-101",
+                    "content": "Rotate encryption keys every 90 days. Contact sec@acme.com.",
+                },
+                {
+                    "doc_id": "sec-103",
+                    "content": "The breach exposed 1200 records.",
+                    "access_level": "confidential",
+                },
+            ]
+        },
+    ).raise_for_status()
 
     context = client.post(
-        "/rag/query", params={"rerank": "true"}, json={"query": "How often are keys rotated?", "top_k": 3}
+        "/rag/query",
+        params={"rerank": "true"},
+        json={"query": "How often are keys rotated?", "top_k": 3},
     ).json()["results"]
     # sec-103 is filtered out (confidential); the email in sec-101 comes back as [REDACTED]
 
     answer = "Rotate encryption keys every 90 days."  # from your LLM, given `context`
-    verdict = client.post("/rag/verify", json={
-        "query": "How often are keys rotated?",
-        "answer": answer,
-        "sources": [{"doc_id": h["metadata"]["doc_id"], "text": h["text"]} for h in context],
-    }).json()
+    verdict = client.post(
+        "/rag/verify",
+        json={
+            "query": "How often are keys rotated?",
+            "answer": answer,
+            "sources": [{"doc_id": h["metadata"]["doc_id"], "text": h["text"]} for h in context],
+        },
+    ).json()
     print(verdict["risk_level"], verdict["confidence"])
 ```
 
@@ -367,7 +401,12 @@ import asyncio
 import statistics
 import time
 
-from aegis_platform.rag.access_control import DocumentAccessControl, DocumentMetadata, Role, UserContext
+from aegis_platform.rag.access_control import (
+    DocumentAccessControl,
+    DocumentMetadata,
+    Role,
+    UserContext,
+)
 from aegis_platform.rag.cross_encoder_reranker import get_cross_encoder_reranker
 from aegis_platform.rag.pii_detector import get_pii_detector
 from aegis_platform.rag.query_guardrails import get_query_guardrails
@@ -375,7 +414,10 @@ from aegis_platform.rag.reranker_base import RawResult
 
 RUNS = 20
 query = "How often should encryption keys be rotated?"
-candidates = [RawResult(result_id=str(i), text=f"Passage {i} about key rotation and storage.") for i in range(20)]
+candidates = [
+    RawResult(result_id=str(i), text=f"Passage {i} about key rotation and storage.")
+    for i in range(20)
+]
 acl = DocumentAccessControl.get_instance()
 acl.register_document(DocumentMetadata(doc_id="d1", title="Doc"))
 user = UserContext(user_id="u1", role=Role.ANALYST)

@@ -48,9 +48,7 @@ def create_chunker(config: ChunkingConfig) -> ChunkingStrategy:
 
     if not strategy_class:
         available = ", ".join(CHUNKING_STRATEGIES.keys())
-        raise ValueError(
-            f"Unknown chunking strategy: {config.strategy}. " f"Available: {available}"
-        )
+        raise ValueError(f"Unknown chunking strategy: {config.strategy}. Available: {available}")
 
     # All LangChain strategies use chunk_size and overlap
     return cast(

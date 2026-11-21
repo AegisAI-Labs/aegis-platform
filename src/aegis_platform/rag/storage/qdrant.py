@@ -116,7 +116,7 @@ class QdrantVectorStore:
 
         if len(vectors) != len(metadata):
             raise ValueError(
-                f"Vector count ({len(vectors)}) must match metadata count " f"({len(metadata)})"
+                f"Vector count ({len(vectors)}) must match metadata count ({len(metadata)})"
             )
 
         if ids and len(ids) != len(vectors):

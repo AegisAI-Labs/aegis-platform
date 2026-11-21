@@ -366,11 +366,12 @@ CHUNK_OVERLAP=50 (default)
 
 ```python
 base_delay = 1.0  # seconds
-max_delay = 32.0   # seconds
+max_delay = 32.0  # seconds
 jitter_factor = 0.1
 
+
 def next_backoff(attempt):
-    delay = base_delay * (backoff_factor ** attempt)
+    delay = base_delay * (backoff_factor**attempt)
     delay = min(delay, max_delay)
     jitter = delay * random.uniform(-jitter_factor, jitter_factor)
     return delay + jitter
@@ -484,13 +485,13 @@ ruff format src/aegis_platform/rag/
 ```python
 # Phase 3: Add Claude embeddings
 EMBEDDING_PROVIDERS = {
-    "openai": OpenAIEmbeddingProvider,       # Current
-    "claude": ClaudeEmbeddingProvider,       # New
-    "local": LocalEmbeddingProvider,         # New
+    "openai": OpenAIEmbeddingProvider,  # Current
+    "claude": ClaudeEmbeddingProvider,  # New
+    "local": LocalEmbeddingProvider,  # New
 }
 
 # Configuration-driven selection (zero code changes)
-EMBEDDING_PROVIDER=claude
+EMBEDDING_PROVIDER = claude
 ```
 
 ### Future: Switch Vector Store
@@ -498,13 +499,13 @@ EMBEDDING_PROVIDER=claude
 ```python
 # Phase 3: Add Pinecone support
 VECTOR_STORES = {
-    "qdrant": QdrantVectorStore,             # Current
-    "pinecone": PineconeVectorStore,         # New
-    "weaviate": WeaviateVectorStore,         # New
+    "qdrant": QdrantVectorStore,  # Current
+    "pinecone": PineconeVectorStore,  # New
+    "weaviate": WeaviateVectorStore,  # New
 }
 
 # Configuration-driven selection (zero code changes)
-VECTOR_STORE=pinecone
+VECTOR_STORE = pinecone
 ```
 
 ### Future: Optimize with Caching
@@ -796,10 +797,12 @@ docker-compose -f docker-compose.qdrant.yml down
 import asyncio
 from qdrant_client import AsyncQdrantClient
 
+
 async def check_health():
     client = AsyncQdrantClient(url="http://localhost:6333")
     collections = await client.get_collections()
     print(f"Qdrant is running. Collections: {collections}")
+
 
 asyncio.run(check_health())
 ```
@@ -844,28 +847,26 @@ docker-compose -f docker-compose.qdrant.yml up -d
 
 ```python
 from aegis_platform.rag import (
-    ChunkingConfig, create_chunker,
-    OpenAIEmbeddingConfig, create_embedding_provider,
-    QdrantVectorStoreConfig, create_vector_store,
+    ChunkingConfig,
+    create_chunker,
+    OpenAIEmbeddingConfig,
+    create_embedding_provider,
+    QdrantVectorStoreConfig,
+    create_vector_store,
 )
+
 
 async def rag_pipeline():
     # 1. Chunk documents (Phase 1)
-    chunker = create_chunker(
-        ChunkingConfig(strategy="recursive", chunk_size=512)
-    )
+    chunker = create_chunker(ChunkingConfig(strategy="recursive", chunk_size=512))
     chunks = chunker.chunk("Your long document text...")
 
     # 2. Create embeddings (Phase 2)
-    embedder = create_embedding_provider(
-        OpenAIEmbeddingConfig(api_key="sk-...")
-    )
+    embedder = create_embedding_provider(OpenAIEmbeddingConfig(api_key="sk-..."))
     embeddings = await embedder.embed([c.text for c in chunks])
 
     # 3. Store in Qdrant (Phase 2)
-    store = create_vector_store(
-        QdrantVectorStoreConfig(url="http://localhost:6333")
-    )
+    store = create_vector_store(QdrantVectorStoreConfig(url="http://localhost:6333"))
     await store.insert(
         collection="documents",
         vectors=embeddings,

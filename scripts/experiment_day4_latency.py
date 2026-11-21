@@ -316,7 +316,7 @@ async def run_calculator_experiment() -> LatencyStats:
 
         measurements.append(latency)
 
-        print(f"Run {iteration:02d}: " f"{format_seconds(latency)}")
+        print(f"Run {iteration:02d}: {format_seconds(latency)}")
 
     return calculate_latency_stats(measurements)
 
@@ -371,7 +371,7 @@ async def run_fake_llm_experiment() -> LatencyStats:
 
         measurements.append(latency)
 
-        print(f"Run {iteration:02d}: " f"{format_seconds(latency)}")
+        print(f"Run {iteration:02d}: {format_seconds(latency)}")
 
     return calculate_latency_stats(measurements)
 
@@ -414,7 +414,7 @@ async def run_real_generate_experiment(
 
         measurements.append(latency)
 
-        print(f"Run {iteration:02d}: " f"{format_seconds(latency)}")
+        print(f"Run {iteration:02d}: {format_seconds(latency)}")
 
     return calculate_latency_stats(measurements)
 
@@ -596,8 +596,8 @@ async def main() -> None:
     print()
     print(f"Iterations : {ITERATIONS}")
     print(f"Prompt     : {TEST_PROMPT}")
-    print(f"Provider   : " f"{settings.llm_provider}")
-    print(f"Model      : " f"{settings.llm_model or '<provider default>'}")
+    print(f"Provider   : {settings.llm_provider}")
+    print(f"Model      : {settings.llm_model or '<provider default>'}")
 
     # ---------------------------------------------------------------
     # Scenario A
@@ -634,7 +634,7 @@ async def main() -> None:
         print("Creating configured real LLM provider...")
 
         provider = LLMProviderFactory.create_llm_provider(settings)
-        print(f"Provider implementation: " f"{type(provider).__name__}")
+        print(f"Provider implementation: {type(provider).__name__}")
 
         # ---------------------------------------------------------------
         # Scenario C

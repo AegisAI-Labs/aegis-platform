@@ -3,10 +3,10 @@
 # Engineering Decision Index
 >This makes the project rather than a "documentation collection" to a "traceable engineering knowledge base"
 
-**Version:** 1.7
+**Version:** 1.8
 **Status:** Active
 **Owner:** Kader Beevi
-**Last Updated:** 2026-11-15
+**Last Updated:** 2026-11-20
 
 Purpose: Provide complete traceability between product decisions, architecture decisions, implementation, testing, and documentation.
 
@@ -300,6 +300,35 @@ Phase 2 of RAG foundation implementing OpenAI EmbeddingProvider and Qdrant Vecto
 | SRS Updates | FR-014, FR-015, FR-016, NFR-009 | ✅ Complete |
 | ADR-009 Phase 2 | Embedding & Vector Store decisions | ✅ Complete |
 | C4 Updates | EmbedderService, VectorStoreService containers | ✅ Complete |
+
+---
+
+## Day 13 - Baseline Hygiene & Roadmap Status Reconciliation
+
+## Overview
+Repository assessment against the master project context, followed by no-behavior-change hygiene so every
+quality gate is green before stabilization work (Days 14-19).
+
+## Feature Traceability
+
+| Stage | Reference |
+|--------|-----------|
+| Roadmap | `docs/Jira/ROADMAP.md` v2.0 (16-week status + Extensions + Stabilization Plan) |
+| Implementation | `src/aegis_platform/agent/graph.py` (`typing.Any` import), ruff format of 14 files |
+| Build | `pyproject.toml` (`pytest-asyncio` moved to dev group), `uv.lock` |
+| Tooling | `.pre-commit-config.yaml` (ruff-pre-commit v0.17.5, matches dev ruff) |
+| CI | `.github/workflows/ci.yml` (`uv sync --locked`, `ruff format --check`) |
+| Documentation | README macOS/Linux setup instructions |
+
+## Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| `uv run pytest` green | ✅ |
+| `uv run ruff check .` green | ✅ |
+| `uv run ruff format --check .` green | ✅ |
+| `uv run mypy src` green | ✅ |
+| No runtime behavior change | ✅ |
 
 ---
 

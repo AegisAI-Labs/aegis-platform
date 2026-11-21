@@ -84,11 +84,7 @@ chunk = Chunk(
     sequence=0,
     start_pos=0,
     end_pos=21,
-    metadata={
-        "strategy": "langchain-recursive",
-        "document_id": "doc-123",
-        "source": "article.md"
-    }
+    metadata={"strategy": "langchain-recursive", "document_id": "doc-123", "source": "article.md"},
 )
 ```
 
@@ -101,7 +97,7 @@ from aegis_platform.rag import Document
 doc = Document(
     document_id="doc-123",
     content="Long text content...",
-    metadata={"source": "article.md", "author": "John Doe"}
+    metadata={"source": "article.md", "author": "John Doe"},
 )
 ```
 
@@ -112,10 +108,7 @@ Represents a result from vector similarity search.
 from aegis_platform.rag import SearchResult
 
 result = SearchResult(
-    chunk_id="doc-123#0",
-    text="The quick brown fox...",
-    score=0.92,
-    metadata={...}
+    chunk_id="doc-123#0", text="The quick brown fox...", score=0.92, metadata={...}
 )
 ```
 
@@ -131,11 +124,7 @@ Handles varied text structures by recursively splitting on separators in order o
 ```python
 from aegis_platform.rag import ChunkingConfig, create_chunker
 
-config = ChunkingConfig(
-    strategy="recursive",
-    chunk_size=512,
-    overlap=50
-)
+config = ChunkingConfig(strategy="recursive", chunk_size=512, overlap=50)
 chunker = create_chunker(config)
 
 # Chunks text handling paragraphs, lines, words, characters in order
@@ -156,16 +145,11 @@ Markdown-aware splitting with code block preservation.
 ```python
 from aegis_platform.rag import ChunkingConfig, create_chunker
 
-config = ChunkingConfig(
-    strategy="markdown",
-    chunk_size=1024,
-    overlap=100
-)
+config = ChunkingConfig(strategy="markdown", chunk_size=1024, overlap=100)
 chunker = create_chunker(config)
 
 # Chunks markdown while preserving headers and code blocks
-chunks = chunker.chunk("# Title\n\n```python\ncode\n```\nContent...",
-                       document_id="doc-2")
+chunks = chunker.chunk("# Title\n\n```python\ncode\n```\nContent...", document_id="doc-2")
 ```
 
 **Best for:**
@@ -187,11 +171,11 @@ All chunkers support runtime configuration via `ChunkingConfig`:
 from aegis_platform.rag import ChunkingConfig
 
 config = ChunkingConfig(
-    strategy="recursive",      # Strategy name
-    chunk_size=512,            # Target chunk size in characters
-    overlap=50,                # Overlap between consecutive chunks
-    min_chunk_size=50,         # Minimum chunk size (smaller chunks discarded)
-    max_chunk_size=2000        # Maximum chunk size (chunks split further if needed)
+    strategy="recursive",  # Strategy name
+    chunk_size=512,  # Target chunk size in characters
+    overlap=50,  # Overlap between consecutive chunks
+    min_chunk_size=50,  # Minimum chunk size (smaller chunks discarded)
+    max_chunk_size=2000,  # Maximum chunk size (chunks split further if needed)
 )
 ```
 
@@ -222,11 +206,7 @@ This is useful for:
 Create chunkers via the factory for dependency injection:
 
 ```python
-from aegis_platform.rag.chunking import (
-    ChunkingConfig,
-    create_chunker,
-    get_available_strategies
-)
+from aegis_platform.rag.chunking import ChunkingConfig, create_chunker, get_available_strategies
 
 # List available strategies
 strategies = get_available_strategies()
@@ -247,6 +227,7 @@ The `EmbeddingProvider` protocol defines the interface for text embedding servic
 ```python
 from aegis_platform.rag import EmbeddingProvider, EmbeddingRequest, EmbeddingResponse
 
+
 class CustomEmbedder(EmbeddingProvider):
     def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
         """Convert text to embeddings."""
@@ -263,6 +244,7 @@ The `VectorStore` protocol defines the interface for vector similarity search an
 
 ```python
 from aegis_platform.rag import VectorStore, SearchResult
+
 
 class CustomVectorStore(VectorStore):
     def index(self, chunks: list[Chunk]) -> None:
@@ -292,7 +274,7 @@ chunker = create_chunker(config)
 document = Document(
     document_id="research-paper-1",
     content="Long research paper content...",
-    metadata={"title": "AI Safety", "year": 2024}
+    metadata={"title": "AI Safety", "year": 2024},
 )
 
 chunks = chunker.chunk(document.content, document.document_id)
@@ -461,6 +443,7 @@ Example:
 ```python
 # src/aegis_platform/rag/chunking/my_strategy.py
 from aegis_platform.rag.chunking.strategy import ChunkingStrategy
+
 
 class MyChunker(ChunkingStrategy):
     def chunk(self, text: str, document_id: str) -> list[Chunk]:

@@ -623,12 +623,12 @@ VECTOR_STORES = {
     # Future: "weaviate": WeaviateVectorStore,
 }
 
-# Factory functions
-def create_embedding_provider(name: str, config: EmbeddingConfig) -> EmbeddingProvider:
-    ...
 
-def create_vector_store(name: str, config: VectorStoreConfig) -> VectorStore:
-    ...
+# Factory functions
+def create_embedding_provider(name: str, config: EmbeddingConfig) -> EmbeddingProvider: ...
+
+
+def create_vector_store(name: str, config: VectorStoreConfig) -> VectorStore: ...
 ```
 
 **File:** `src/aegis_platform/rag/provider_factory.py` (extend existing)

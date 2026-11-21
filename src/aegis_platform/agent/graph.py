@@ -1,4 +1,5 @@
-from langchain_protocol import Any
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
 
 from aegis_platform.llm.base import LLMProvider

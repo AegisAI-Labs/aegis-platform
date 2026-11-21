@@ -188,7 +188,7 @@ class RankerBase(ABC):
 
         for i, result in enumerate(results):
             if not isinstance(result, RawResult):
-                raise TypeError(f"Result {i} must be RawResult instance, " f"got {type(result)}")
+                raise TypeError(f"Result {i} must be RawResult instance, got {type(result)}")
 
             if not result.text or not result.text.strip():
                 raise ValueError(f"Result {i} text cannot be empty")

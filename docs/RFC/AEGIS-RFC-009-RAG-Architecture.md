@@ -113,21 +113,21 @@ Configuration
 ```python
 @dataclass
 class Chunk:
-    text: str                           # Content of the chunk
-    chunk_id: str                       # Format: doc_id#sequence
-    sequence: int                       # Position in document
-    start_pos: int                      # Character position in original
-    end_pos: int                        # Character position in original
-    metadata: Dict[str, Any]            # Strategy, document_id, source, etc.
+    text: str  # Content of the chunk
+    chunk_id: str  # Format: doc_id#sequence
+    sequence: int  # Position in document
+    start_pos: int  # Character position in original
+    end_pos: int  # Character position in original
+    metadata: Dict[str, Any]  # Strategy, document_id, source, etc.
 ```
 
 #### Document Model
 ```python
 @dataclass
 class Document:
-    doc_id: str                         # Unique document identifier
-    content: str                        # Full document text
-    metadata: Dict[str, Any]            # Source, type, timestamp, etc.
+    doc_id: str  # Unique document identifier
+    content: str  # Full document text
+    metadata: Dict[str, Any]  # Source, type, timestamp, etc.
 ```
 
 ### 4.3 Factory Pattern
@@ -163,21 +163,21 @@ CHUNKING_STRATEGIES = {
 ```python
 @dataclass(frozen=True)
 class ChunkingConfig:
-    strategy: str = "recursive"         # Strategy name
-    chunk_size: int = 1024              # Target chunk size in characters
-    overlap: int = 128                  # Overlap between chunks
-    min_chunk_size: int = 50            # Minimum chunk size
-    max_chunk_size: int = 10000         # Maximum chunk size
+    strategy: str = "recursive"  # Strategy name
+    chunk_size: int = 1024  # Target chunk size in characters
+    overlap: int = 128  # Overlap between chunks
+    min_chunk_size: int = 50  # Minimum chunk size
+    max_chunk_size: int = 10000  # Maximum chunk size
 ```
 
 ### EmbeddingConfig (Future)
 ```python
 @dataclass(frozen=True)
 class EmbeddingConfig:
-    provider: str = "openai"            # Provider name
+    provider: str = "openai"  # Provider name
     model: str = "text-embedding-3-small"
-    api_key: str = ""                   # From environment
-    base_url: str = ""                  # Optional custom endpoint
+    api_key: str = ""  # From environment
+    base_url: str = ""  # Optional custom endpoint
     timeout: int = 30
 ```
 
@@ -185,11 +185,11 @@ class EmbeddingConfig:
 ```python
 @dataclass(frozen=True)
 class VectorStoreConfig:
-    type: str = "qdrant"                # Vector store type
+    type: str = "qdrant"  # Vector store type
     url: str = "http://localhost:6333"  # Connection URL
     collection_name: str = "documents"  # Collection/index name
-    distance_metric: str = "cosine"     # Distance metric
-    api_key: str = ""                   # Optional auth
+    distance_metric: str = "cosine"  # Distance metric
+    api_key: str = ""  # Optional auth
 ```
 
 ## 6. Data Flow
@@ -361,9 +361,9 @@ from aegis_platform.rag.chunking import create_chunker
 from aegis_platform.rag.models import ChunkingConfig
 
 config = ChunkingConfig(
-    strategy="recursive",           # From env
-    chunk_size=1024,               # From env
-    overlap=128,                   # From env
+    strategy="recursive",  # From env
+    chunk_size=1024,  # From env
+    overlap=128,  # From env
 )
 chunker = create_chunker(config)
 chunks = chunker.chunk(document_text, doc_id="doc_123")

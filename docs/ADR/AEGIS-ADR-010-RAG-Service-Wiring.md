@@ -30,9 +30,9 @@ def get_rag_service() -> RAGService:
     vector_store = get_configured_vector_store()
     return RAGService(provider=provider, vector_store=vector_store)
 
+
 @app.get("/api/rag/health")
-async def health_check(service: RAGService = Depends(get_rag_service)):
-    ...
+async def health_check(service: RAGService = Depends(get_rag_service)): ...
 ```
 
 **Pros:**
@@ -54,15 +54,15 @@ class ServiceContainer:
 
     @classmethod
     def get_rag_service(cls) -> RAGService:
-        if 'rag_service' not in cls._instances:
+        if "rag_service" not in cls._instances:
             provider = get_configured_provider()
             vector_store = get_configured_vector_store()
-            cls._instances['rag_service'] = RAGService(provider, vector_store)
-        return cls._instances['rag_service']
+            cls._instances["rag_service"] = RAGService(provider, vector_store)
+        return cls._instances["rag_service"]
+
 
 @app.get("/api/rag/health")
-async def health_check(service: RAGService = Depends(ServiceContainer.get_rag_service)):
-    ...
+async def health_check(service: RAGService = Depends(ServiceContainer.get_rag_service)): ...
 ```
 
 **Pros:**
@@ -81,6 +81,7 @@ from contextlib import asynccontextmanager
 
 rag_service: Optional[RAGService] = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -94,7 +95,9 @@ async def lifespan(app: FastAPI):
     # Shutdown
     await rag_service.cleanup()
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 @app.get("/api/rag/health")
 async def health_check():
@@ -173,6 +176,7 @@ from aegis_platform.rag.provider_factory import (
     get_configured_vector_store,
 )
 
+
 @lru_cache(maxsize=1)
 def get_rag_service() -> RAGService:
     """
@@ -205,6 +209,7 @@ async def health_check(service: RAGService = Depends(get_rag_service)):
     """Check embedding provider and vector store connectivity"""
     return await service.health_check()
 
+
 @router.post("/embed", response_model=EmbedResponse)
 async def embed_text(
     request: EmbedRequest,
@@ -225,6 +230,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
 
+
 @pytest.fixture
 def mock_rag_service():
     """Mock RAG Service for testing endpoints"""
@@ -236,11 +242,13 @@ def mock_rag_service():
     }
     return mock
 
+
 @pytest.fixture
 def test_client(mock_rag_service):
     """TestClient with mocked RAG Service"""
     with patch("app.api.rag.get_rag_service", return_value=mock_rag_service):
         yield TestClient(app)
+
 
 def test_health_endpoint(test_client):
     response = test_client.post("/api/rag/health")
@@ -260,6 +268,7 @@ from aegis_platform.rag.embeddings import (
 )
 from aegis_platform.rag.vector_stores import QdrantVectorStore
 
+
 def get_configured_embedding_provider() -> EmbeddingProvider:
     """Load embedding provider from configuration"""
     provider_name = os.getenv("RAG_EMBEDDING_PROVIDER", "openai").lower()
@@ -270,9 +279,9 @@ def get_configured_embedding_provider() -> EmbeddingProvider:
         return NVIDIAEmbeddingProvider.from_env()
     else:
         raise ValueError(
-            f"Unknown embedding provider: {provider_name}. "
-            f"Supported: 'openai', 'nvidia'"
+            f"Unknown embedding provider: {provider_name}. Supported: 'openai', 'nvidia'"
         )
+
 
 def get_configured_vector_store() -> VectorStore:
     """Load vector store from configuration"""
@@ -317,6 +326,7 @@ def get_configured_vector_store() -> VectorStore:
 If FastAPI adds application context support similar to Flask, could use:
 ```python
 from fastapi.context import g
+
 g.rag_service = RAGService(...)  # Hypothetical
 ```
 But this doesn't exist in current FastAPI, so premature.

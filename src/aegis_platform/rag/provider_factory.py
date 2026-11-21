@@ -74,7 +74,7 @@ def create_embedding_provider(
     else:
         available = ", ".join(EMBEDDING_PROVIDERS.keys())
         raise TypeError(
-            f"Unknown config type: {type(config).__name__}. " f"Available providers: {available}"
+            f"Unknown config type: {type(config).__name__}. Available providers: {available}"
         )
 
 
@@ -113,7 +113,7 @@ def create_vector_store(config: QdrantVectorStoreConfig) -> VectorStore:
     else:
         available = ", ".join(VECTOR_STORES.keys())
         raise TypeError(
-            f"Unknown config type: {type(config).__name__}. " f"Available stores: {available}"
+            f"Unknown config type: {type(config).__name__}. Available stores: {available}"
         )
 
 

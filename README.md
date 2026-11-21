@@ -106,9 +106,21 @@ Every feature follows this workflow.
 
 ## Run Locally
 
-Install the project dependencies:
+Install [uv](https://docs.astral.sh/uv/) if you don't have it:
 
 ```powershell
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+```bash
+# macOS / Linux
+brew install uv        # or: curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Install the project dependencies (creates `.venv`):
+
+```bash
 uv sync
 ```
 
@@ -129,7 +141,9 @@ NVIDIA_MODEL=openai/gpt-oss-20b
 NVIDIA_API_KEY=your-nvidia-api-key
 ```
 
-Do not commit `.env` or API keys. Start the API from the repository root:
+Do not commit `.env` or API keys. Start the API from the repository root.
+
+**Windows (PowerShell):**
 
 ```powershell
 # Activate the virtual environment
@@ -141,6 +155,23 @@ $env:PYTHONPATH="src"
 # Start the API server
 python -m uvicorn aegis_platform.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+**macOS / Linux (zsh/bash):**
+
+```bash
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Set PYTHONPATH to locate the aegis_platform module
+export PYTHONPATH=src
+
+# Start the API server
+python -m uvicorn aegis_platform.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Run `deactivate` to leave the virtual environment. Alternatively, skip
+activation and prefix commands with `uv run` (e.g.
+`PYTHONPATH=src uv run uvicorn aegis_platform.api.main:app --reload`).
 
 Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for the API
 documentation, or check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)

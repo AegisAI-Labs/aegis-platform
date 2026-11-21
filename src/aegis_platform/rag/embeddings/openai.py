@@ -55,7 +55,7 @@ class OpenAIEmbeddingConfig:
             raise ValueError("max_retries cannot be negative")
         if self.dimension != 1536:
             raise ValueError(
-                f"text-embedding-3-small always returns 1536 dimensions, " f"got {self.dimension}"
+                f"text-embedding-3-small always returns 1536 dimensions, got {self.dimension}"
             )
 
 

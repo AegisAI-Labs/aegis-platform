@@ -434,7 +434,7 @@ class TestEdgeCases:
             retrieval_scores=[0.95],
         )
 
-        response = "In 2020, there were 100 items. " "Also 200 things. " "And 500 other items."
+        response = "In 2020, there were 100 items. Also 200 things. And 500 other items."
 
         score = await detector.detect_hallucinations(response, context, [])
 

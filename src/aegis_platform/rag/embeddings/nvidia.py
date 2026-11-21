@@ -236,8 +236,7 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
                     )
 
                 logger.debug(
-                    f"Successfully embedded {len(texts)} texts "
-                    f"({len(embeddings[0])} dimensions)"
+                    f"Successfully embedded {len(texts)} texts ({len(embeddings[0])} dimensions)"
                 )
 
                 return embeddings
@@ -302,7 +301,7 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
         if not all(isinstance(t, str) for t in texts):
             raise ValueError("All inputs must be strings")
 
-        logger.info(f"Embedding {len(texts)} texts " f"(batch_size={self.config.batch_size})")
+        logger.info(f"Embedding {len(texts)} texts (batch_size={self.config.batch_size})")
 
         all_embeddings: list[np.ndarray] = []
 

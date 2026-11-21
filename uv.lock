@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -21,7 +21,6 @@ dependencies = [
     { name = "presidio-analyzer" },
     { name = "presidio-anonymizer" },
     { name = "pydantic-settings" },
-    { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "qdrant-client" },
     { name = "sentence-transformers" },
@@ -35,6 +34,7 @@ dev = [
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
 
@@ -48,7 +48,6 @@ requires-dist = [
     { name = "presidio-analyzer", specifier = ">=2.2.366" },
     { name = "presidio-anonymizer", specifier = ">=2.2.366" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
-    { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "qdrant-client", specifier = ">=1.20.0" },
     { name = "sentence-transformers", specifier = ">=6.3.0" },
@@ -62,6 +61,7 @@ dev = [
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pre-commit", specifier = ">=4.6.2" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "ruff", specifier = ">=0.16.9" },
 ]
 
