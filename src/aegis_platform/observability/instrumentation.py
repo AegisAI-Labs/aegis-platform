@@ -1,8 +1,25 @@
+"""Provider decorator that records logical-request telemetry (see ADR-008).
+
+Every logical request records exactly one ``llm_requests_total`` and one
+``llm_request_duration_seconds`` point, whatever the outcome:
+
+* success          -> ``llm.request.completed`` / ``llm.stream.completed``
+* failure          -> ``llm_requests_failed_total`` + ``llm.request.failed``
+* stream failure after output was delivered
+                   -> additionally ``llm_stream_interruptions_total`` + ``llm.stream.interrupted``
+* cancellation / early stream close
+                   -> ``llm_requests_cancelled_total`` + ``llm.request.cancelled`` (never a failure)
+
+Events never contain prompts, completions or raw exception messages.
+"""
+
 import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+
+from aegis_platform.llm.base import LLMProvider
+from aegis_platform.llm.models import LLMRequest, LLMResponse
 
 from .context import get_correlation_id
 from .contracts import (
@@ -14,28 +31,37 @@ from .contracts import (
 
 logger = logging.getLogger(__name__)
 
+UNKNOWN = "unknown"
+_MAX_PROVIDER_LABEL = 64
+_MAX_MODEL_LABEL = 96
+
+EventAttributes = dict[str, str | int | float | bool]
+
 
 class ObservedLLMProvider:
-    """Decorates an existing LLMProvider with operational telemetry.
-
-    Expected provider contract:
-        async generate(request) -> LLMResponse
-        stream(request) -> AsyncIterator[str]
-    """
+    """Decorates an existing LLMProvider with operational telemetry."""
 
     def __init__(
         self,
-        provider: Any,
+        provider: LLMProvider,
         metrics: MetricsSink,
         events: EventSink,
+        *,
+        default_model: str | None = None,
     ) -> None:
         self._provider = provider
         self._metrics = metrics
         self._events = events
+        self._default_model = default_model or None
 
     @property
     def provider_name(self) -> str:
-        return str(getattr(self._provider, "provider_name", "unknown"))
+        return str(getattr(self._provider, "provider_name", UNKNOWN))
+
+    def _resolve_model(self, request: LLMRequest) -> str:
+        """Request model, then configured default; never the string ``"None"``."""
+        model = getattr(request, "model", None)
+        return str(model or self._default_model or UNKNOWN)
 
     def _record_metric(
         self,
@@ -50,8 +76,8 @@ class ObservedLLMProvider:
                     name=name,
                     value=value,
                     labels={
-                        "provider": provider[:64],
-                        "model": model[:96],
+                        "provider": provider[:_MAX_PROVIDER_LABEL],
+                        "model": model[:_MAX_MODEL_LABEL],
                     },
                 )
             )
@@ -63,11 +89,7 @@ class ObservedLLMProvider:
                 exc_info=sink_error,
             )
 
-    def _emit_event(
-        self,
-        name: str,
-        attributes: dict[str, str | int | float | bool],
-    ) -> None:
+    def _emit_event(self, name: str, attributes: EventAttributes) -> None:
         try:
             self._events.emit(
                 ObservabilityEvent(
@@ -82,61 +104,79 @@ class ObservedLLMProvider:
                 exc_info=sink_error,
             )
 
-    async def generate(self, request: Any) -> Any:
+    def _record_request(self, elapsed: float, provider: str, model: str) -> None:
+        """The single logical-request count and duration for every outcome."""
+        self._record_metric("llm_requests_total", 1, provider, model)
+        self._record_metric("llm_request_duration_seconds", elapsed, provider, model)
+
+    def _record_failure(
+        self,
+        exc: BaseException,
+        provider: str,
+        model: str,
+        correlation_id: str,
+        *,
+        output_delivered: bool = False,
+    ) -> None:
+        self._record_metric("llm_requests_failed_total", 1, provider, model)
+
+        if output_delivered:
+            self._record_metric("llm_stream_interruptions_total", 1, provider, model)
+
+        self._emit_event(
+            "llm.stream.interrupted" if output_delivered else "llm.request.failed",
+            {
+                "provider": provider,
+                "model": model,
+                "correlation_id": correlation_id,
+                "error_type": type(exc).__name__,
+            },
+        )
+
+    def _record_cancellation(
+        self,
+        reason: str,
+        provider: str,
+        model: str,
+        correlation_id: str,
+    ) -> None:
+        self._record_metric("llm_requests_cancelled_total", 1, provider, model)
+        self._emit_event(
+            "llm.request.cancelled",
+            {
+                "provider": provider,
+                "model": model,
+                "correlation_id": correlation_id,
+                "reason": reason,
+            },
+        )
+
+    async def generate(self, request: LLMRequest) -> LLMResponse:
         started = time.perf_counter()
 
         provider = self.provider_name
-        model = str(getattr(request, "model", "unknown"))
+        model = self._resolve_model(request)
         correlation_id = get_correlation_id()
 
         try:
             response = await self._provider.generate(request)
 
         except asyncio.CancelledError:
+            self._record_request(time.perf_counter() - started, provider, model)
+            self._record_cancellation("cancelled", provider, model, correlation_id)
             raise
 
         except Exception as exc:
-            elapsed = time.perf_counter() - started
-
-            self._record_metric("llm_requests_total", 1, provider, model)
-            self._record_metric("llm_requests_failed_total", 1, provider, model)
-            self._record_metric(
-                "llm_request_duration_seconds",
-                elapsed,
-                provider,
-                model,
-            )
-
-            self._emit_event(
-                "llm.request.failed",
-                {
-                    "provider": provider,
-                    "model": model,
-                    "correlation_id": correlation_id,
-                    "error_type": type(exc).__name__,
-                },
-            )
-
+            self._record_request(time.perf_counter() - started, provider, model)
+            self._record_failure(exc, provider, model, correlation_id)
             raise
 
         elapsed = time.perf_counter() - started
 
-        response_provider = str(getattr(response, "provider", provider))
-        response_model = str(getattr(response, "model", model))
+        response_provider = str(getattr(response, "provider", None) or provider)
+        response_model = str(getattr(response, "model", None) or model)
 
-        self._record_metric(
-            "llm_requests_total",
-            1,
-            response_provider,
-            response_model,
-        )
-
-        self._record_metric(
-            "llm_request_duration_seconds",
-            elapsed,
-            response_provider,
-            response_model,
-        )
+        self._record_request(elapsed, response_provider, response_model)
 
         usage = getattr(response, "usage", None)
 
@@ -172,22 +212,20 @@ class ObservedLLMProvider:
 
         return response
 
-    def stream(self, request: Any) -> AsyncIterator[str]:
+    def stream(self, request: LLMRequest) -> AsyncIterator[str]:
         async def iterator() -> AsyncIterator[str]:
             started = time.perf_counter()
-
             first_token_at: float | None = None
-            completed = False
+            delivered = False
 
             provider = self.provider_name
-            model = str(getattr(request, "model", "unknown"))
+            model = self._resolve_model(request)
             correlation_id = get_correlation_id()
 
             try:
                 async for chunk in self._provider.stream(request):
                     if chunk and first_token_at is None:
                         first_token_at = time.perf_counter()
-
                         self._record_metric(
                             "llm_time_to_first_token_seconds",
                             first_token_at - started,
@@ -195,67 +233,42 @@ class ObservedLLMProvider:
                             model,
                         )
 
+                    delivered = True
                     yield chunk
 
-                completed = True
-
             except asyncio.CancelledError:
+                self._record_request(time.perf_counter() - started, provider, model)
+                self._record_cancellation("cancelled", provider, model, correlation_id)
+                raise
+
+            except GeneratorExit:
+                # The consumer stopped iterating (aclose / client disconnect).
+                self._record_request(time.perf_counter() - started, provider, model)
+                self._record_cancellation("closed_early", provider, model, correlation_id)
                 raise
 
             except Exception as exc:
-                self._record_metric(
-                    "llm_requests_failed_total",
-                    1,
+                self._record_request(time.perf_counter() - started, provider, model)
+                self._record_failure(
+                    exc,
                     provider,
                     model,
+                    correlation_id,
+                    output_delivered=delivered,
                 )
-
-                self._record_metric(
-                    "llm_stream_interruptions_total",
-                    1,
-                    provider,
-                    model,
-                )
-
-                self._emit_event(
-                    "llm.stream.interrupted",
-                    {
-                        "provider": provider,
-                        "model": model,
-                        "correlation_id": correlation_id,
-                        "error_type": type(exc).__name__,
-                    },
-                )
-
                 raise
 
-            finally:
-                elapsed = time.perf_counter() - started
-
-                self._record_metric(
-                    "llm_requests_total",
-                    1,
-                    provider,
-                    model,
-                )
-
-                self._record_metric(
-                    "llm_request_duration_seconds",
-                    elapsed,
-                    provider,
-                    model,
-                )
-
-                if completed:
-                    self._emit_event(
-                        "llm.stream.completed",
-                        {
-                            "provider": provider,
-                            "model": model,
-                            "correlation_id": correlation_id,
-                            "duration_seconds": elapsed,
-                        },
-                    )
+            elapsed = time.perf_counter() - started
+            self._record_request(elapsed, provider, model)
+            self._emit_event(
+                "llm.stream.completed",
+                {
+                    "provider": provider,
+                    "model": model,
+                    "correlation_id": correlation_id,
+                    "duration_seconds": elapsed,
+                },
+            )
 
         return iterator()
 
@@ -266,6 +279,4 @@ class ObservedLLMProvider:
 # 3. TTFT is measured at the first non-empty chunk.
 # 4. Streaming output is yielded unchanged.
 # 5. Exceptions are re-raised; telemetry does not hide provider failures.
-# 6. Token usage is recorded only when the provider supplies it.
-# 7. No prompts, completions, or raw exception messages are included in events.
-# Streaming cancellation: Cancellation is propagated, not converted into a provider failure. The finally block still records the operation count and duration.
+# 6. Token usage is recorded only when the provider supplies it (not available for streams).

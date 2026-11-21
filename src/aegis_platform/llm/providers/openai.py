@@ -41,6 +41,8 @@ class OpenAIProvider(LLMProvider):
         self.client = AsyncOpenAI(
             api_key=api_key,
             timeout=timeout_seconds,
+            # Retries are owned by RetryingLLMProvider (ADR-007); avoid stacked SDK retries.
+            max_retries=0,
         )
 
     async def generate(

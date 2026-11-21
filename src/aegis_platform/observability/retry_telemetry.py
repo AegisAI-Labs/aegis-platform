@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class RetryTelemetry:
+    """``RetryingLLMProvider`` ``on_retry`` callback: one metric point and one event per retry.
+
+    Best-effort: sink failures are logged and never affect retry behavior.
+    """
+
     def __init__(
         self,
         metrics: MetricsSink,
@@ -21,8 +26,8 @@ class RetryTelemetry:
     ) -> None:
         self._metrics = metrics
         self._events = events
-        self._provider = provider
-        self._model = model
+        self._provider = (provider or "unknown")[:64]
+        self._model = (model or "unknown")[:96]
 
     def __call__(
         self,
@@ -41,7 +46,10 @@ class RetryTelemetry:
                     },
                 )
             )
+        except Exception as telemetry_error:
+            logger.warning("Unable to record retry metric", exc_info=telemetry_error)
 
+        try:
             self._events.emit(
                 ObservabilityEvent(
                     name="llm.retry",
@@ -49,12 +57,12 @@ class RetryTelemetry:
                         "provider": self._provider,
                         "model": self._model,
                         "attempt": attempt,
+                        "next_attempt": attempt + 1,
                         "delay_seconds": delay_seconds,
                         "error_type": type(exc).__name__,
                         "correlation_id": get_correlation_id(),
                     },
                 )
             )
-
         except Exception as telemetry_error:
-            logger.warning("Unable to record retry telemetry", exc_info=telemetry_error)
+            logger.warning("Unable to emit retry event", exc_info=telemetry_error)

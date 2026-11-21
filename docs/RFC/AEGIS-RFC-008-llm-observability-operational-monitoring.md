@@ -1,6 +1,6 @@
-# RFC-004: LLM Observability and Operational Monitoring
+# RFC-008: LLM Observability and Operational Monitoring
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-20, Day 14; decision recorded in ADR-008)
 - **Owner:** AEGIS Platform
 - **Date:** 2026-11-02
 - **Scope:** Provider-agnostic LLM observability
@@ -102,3 +102,6 @@ Metric labels must remain bounded. Provider and model are allowed dimensions. Re
 - Observability sink failures do not fail LLM requests.
 - Cancellation is propagated.
 - Tests cover successful and failed operations.
+- Cancellation and early stream closure are counted once, as cancelled, never as failures.
+- Correlation IDs propagate from the `X-Correlation-ID` header into events and back to the response.
+- Retry telemetry is emitted for streaming retries as well as generation retries.

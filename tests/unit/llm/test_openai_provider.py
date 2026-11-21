@@ -158,3 +158,10 @@ async def test_openai_generate_maps_quota_exhaustion() -> None:
             await provider.generate(request)
 
     assert raised.value.__cause__ is quota_error
+
+
+def test_openai_sdk_retries_disabled() -> None:
+    """RetryingLLMProvider is the only retry layer (ADR-007)."""
+    provider = OpenAIProvider(api_key="test-key", model="default-model")
+
+    assert provider.client.max_retries == 0

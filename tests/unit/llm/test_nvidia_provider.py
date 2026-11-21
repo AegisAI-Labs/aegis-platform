@@ -148,3 +148,10 @@ async def test_nvidia_generate_maps_quota_exhaustion() -> None:
             await provider.generate(request)
 
     assert raised.value.__cause__ is quota_error
+
+
+def test_nvidia_sdk_retries_disabled() -> None:
+    """RetryingLLMProvider is the only retry layer (ADR-007)."""
+    provider = NvidiaProvider(api_key="test-key", model="default-model", timeout_seconds=10)
+
+    assert provider.client.max_retries == 0

@@ -1,7 +1,7 @@
 # AEGIS Roadmap
 
 Version: 2.0
-Last Updated: 2026-11-20 (Day 13 — status reconciliation)
+Last Updated: 2026-11-20 (Day 14 — LLM observability closed)
 
 The original 16-week roadmap is the source of truth. Work added outside it is tracked
 under **Extensions** and does not replace any milestone.
@@ -40,8 +40,8 @@ Status values are based on source code and test evidence, not on design document
 |-----------|-----|--------|-----------------------|
 | LLM streaming + error boundaries | 5 | Done | RFC-005, ADR-005. |
 | Multi-provider (OpenAI + NVIDIA) | 6 | Done | RFC-006, ADR-006, `llm/providers/nvidia.py`. |
-| Retry reliability (`RetryingLLMProvider`) | 7 | Done (defects) | ADR-007. Gaps: stream retries emit no retry callback; SDK default retries stack with ours. |
-| LLM observability (`ObservedLLMProvider`) | 8 | Partial | RFC-008, ADR-008. Gaps: model label `"None"`; cancellation telemetry; correlation-ID middleware; unbounded sinks; 4 of 15 required tests. |
+| Retry reliability (`RetryingLLMProvider`) | 7, 14 | Done | ADR-007 (Accepted). Day 14: stream retries emit retry telemetry; SDK retries disabled (`max_retries=0`); policy in `Settings` (`LLM_RETRY_*`). |
+| LLM observability (`ObservedLLMProvider`) | 8, 14 | Done | RFC-008 / ADR-008 (Accepted). Day 14: model label fallback, cancellation/early-close semantics, interruption only after output, `X-Correlation-ID` middleware, bounded sinks, all 15 required tests. Export to Prometheus/OTel is W9/W10. |
 | RAG safety layers | 12 | Partial | Guardrails, PII, access control, rerank, citations, hallucination checks. Gaps: no RFC/ADR/SRS entry; blocking calls in async code. |
 
 ---
@@ -53,7 +53,7 @@ No new milestone (W5 PostgreSQL, W6 Kafka) starts until these days are committed
 | Day | Scope | Status |
 |-----|-------|--------|
 | 13 | Baseline hygiene + roadmap status reconciliation | Done |
-| 14 | Close LLM observability milestone | Planned |
+| 14 | Close LLM observability milestone | Done |
 | 15 | Agent hardening (real streaming, error mapping, safe calculator, routing) | Planned |
 | 16 | RAG real path (embedder interface, Qdrant query/IDs/collection, tests) | Planned |
 | 17 | RAG grounded answers + agent integration (RFC-009 Phase 3) | Planned |

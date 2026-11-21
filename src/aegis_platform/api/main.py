@@ -22,11 +22,15 @@ from aegis_platform.observability import (
     InMemoryMetricsSink,
     ObservedLLMProvider,
 )
+from aegis_platform.observability.middleware import CorrelationIdMiddleware
 from aegis_platform.observability.retry_telemetry import (
     RetryTelemetry,
 )
 
 app = FastAPI(title="Aegis AI Platform")
+
+# Bind an X-Correlation-ID to every request (accepted from the caller or generated).
+app.add_middleware(CorrelationIdMiddleware)
 
 # Export .env to os.environ: the RAG router and the OpenAI SDK read the environment
 # directly. Like Settings, the file is found from the working directory; variables
@@ -44,15 +48,11 @@ provider_name = getattr(
     "unknown",
 )
 
-model_name = (
-    settings.nvidia_model
-    if settings.llm_provider.strip().lower() == "nvidia"
-    else settings.llm_model
-)
+model_name = settings.active_model
 
-# Observability sinks
-metrics = InMemoryMetricsSink()
-events = InMemoryEventSink()
+# Observability sinks (bounded, in-memory)
+metrics = InMemoryMetricsSink(max_points=settings.observability_max_records)
+events = InMemoryEventSink(max_events=settings.observability_max_records)
 
 # Retry telemetry
 retry_telemetry = RetryTelemetry(
@@ -66,11 +66,12 @@ retry_telemetry = RetryTelemetry(
 retrying_llm_provider = RetryingLLMProvider(
     llm_provider,
     policy=RetryPolicy(
-        max_attempts=3,
-        timeout_seconds=100,  # overall deadline, separate from the provider's 30s per-call timeout
-        initial_delay_seconds=1,
-        max_delay_seconds=5,
-        jitter=True,
+        max_attempts=settings.llm_retry_max_attempts,
+        # overall deadline, separate from the provider's per-call timeout
+        timeout_seconds=settings.llm_retry_deadline_seconds,
+        initial_delay_seconds=settings.llm_retry_initial_delay_seconds,
+        max_delay_seconds=settings.llm_retry_max_delay_seconds,
+        jitter=settings.llm_retry_jitter,
     ),
     retryable_exceptions=(
         ProviderRateLimited,
@@ -85,6 +86,7 @@ observed_provider = ObservedLLMProvider(
     provider=retrying_llm_provider,
     metrics=metrics,
     events=events,
+    default_model=model_name,
 )
 
 # Agent service uses the observed LLM provider, which wraps the retrying provider with observability features, for handling requests with retries

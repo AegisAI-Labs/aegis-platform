@@ -1,13 +1,21 @@
+from collections import deque
 from threading import Lock
 
 from .contracts import ObservabilityEvent
 
+DEFAULT_MAX_EVENTS = 10_000
+
 
 class InMemoryEventSink:
-    """Thread-safe event sink for tests and local development."""
+    """Thread-safe, bounded event sink for tests and local development.
 
-    def __init__(self) -> None:
-        self._events: list[ObservabilityEvent] = []
+    Keeps the most recent ``max_events`` events and drops the oldest.
+    """
+
+    def __init__(self, max_events: int = DEFAULT_MAX_EVENTS) -> None:
+        if max_events < 1:
+            raise ValueError("max_events must be >= 1")
+        self._events: deque[ObservabilityEvent] = deque(maxlen=max_events)
         self._lock = Lock()
 
     def emit(self, event: ObservabilityEvent) -> None:

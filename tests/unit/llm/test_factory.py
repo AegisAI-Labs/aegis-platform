@@ -50,3 +50,30 @@ def test_factory_rejects_unsupported_provider() -> None:
 def test_settings_reject_invalid_timeout() -> None:
     with pytest.raises(ValidationError, match="llm_timeout_seconds"):
         Settings(llm_timeout_seconds="not-a-number")  # type: ignore[arg-type]
+
+
+def test_settings_retry_defaults_match_previous_policy() -> None:
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_retry_max_attempts == 3
+    assert settings.llm_retry_deadline_seconds == 100.0
+    assert settings.llm_retry_initial_delay_seconds == 1.0
+    assert settings.llm_retry_max_delay_seconds == 5.0
+    assert settings.llm_retry_jitter is True
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected"),
+    [("openai", "openai-model"), (" NVIDIA ", "nvidia-model"), ("other", "openai-model")],
+)
+def test_settings_active_model(provider: str, expected: str) -> None:
+    settings = Settings(
+        llm_provider=provider, llm_model="openai-model", nvidia_model="nvidia-model"
+    )
+
+    assert settings.active_model == expected
+
+
+def test_settings_reject_invalid_retry_attempts() -> None:
+    with pytest.raises(ValidationError):
+        Settings(llm_retry_max_attempts=0)

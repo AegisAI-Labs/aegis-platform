@@ -37,6 +37,8 @@ class NvidiaProvider(LLMProvider):
             api_key=api_key,
             base_url=self.DEFAULT_BASE_URL,
             timeout=timeout_seconds,
+            # Retries are owned by RetryingLLMProvider (ADR-007); avoid stacked SDK retries.
+            max_retries=0,
         )
 
     async def generate(

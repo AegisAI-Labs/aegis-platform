@@ -332,6 +332,40 @@ quality gate is green before stabilization work (Days 14-19).
 
 ---
 
+## Day 14 - LLM Observability Milestone Closure
+
+## Overview
+Closes the Day 8 observability extension: telemetry semantics for every outcome, correlation IDs at the HTTP
+boundary, streaming retry telemetry, a single retry layer, and the 15 required tests (master context §7.5).
+Supersedes the "Pending" items in the Day 8 table above.
+
+## Feature Traceability
+
+| Stage | Reference |
+|--------|-----------|
+| RFC | AEGIS-RFC-008 — Accepted (heading fixed from "RFC-004") |
+| ADR | AEGIS-ADR-008 — Accepted, amended with telemetry semantics (heading fixed from "ADR-004"); AEGIS-ADR-007 — Accepted |
+| Implementation | `observability/instrumentation.py`, `observability/context.py`, `observability/middleware.py` (new), `observability/metrics.py`, `observability/events.py`, `observability/retry_telemetry.py`, `llm/reliability.py`, `llm/providers/{openai,nvidia}.py`, `config/settings.py`, `api/main.py` |
+| Configuration | `.env.example`: `LLM_RETRY_*`, `OBSERVABILITY_MAX_RECORDS` (replaces unused `LLM_MAX_RETRIES`) |
+| Tests | `tests/unit/observability/test_observability_semantics.py`, `tests/unit/observability/test_correlation_middleware.py`, provider/settings tests in `tests/unit/llm/` |
+
+## Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| 15 required observability cases tested | ✅ |
+| Model label never `"None"` (request → configured default → `unknown`) | ✅ |
+| Cancellation / early stream close counted once, never as failure | ✅ |
+| Interruption counted only after output was delivered | ✅ |
+| Streaming retries emit `llm_retries_total` + `llm.retry` (with `next_attempt`) | ✅ |
+| `X-Correlation-ID` accepted (validated) or generated, echoed, reset per request | ✅ |
+| In-memory sinks bounded | ✅ |
+| Provider SDK retries disabled (`max_retries=0`) | ✅ |
+| Live smoke test (NVIDIA): `/agent/run`, `/agent/stream`, `/observability/*` | ✅ |
+| Prometheus / OpenTelemetry export | Deferred to W9/W10 |
+
+---
+
 # Cross-Reference Matrix
 
 | Artifact | Connected Documents |

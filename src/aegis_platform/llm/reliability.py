@@ -196,6 +196,7 @@ class RetryingLLMProvider:
                             "streaming": True,
                         },
                     )
+                    self._notify_retry(attempt, delay, exc)
                     await self._wait(delay, deadline)
 
         return iterate()

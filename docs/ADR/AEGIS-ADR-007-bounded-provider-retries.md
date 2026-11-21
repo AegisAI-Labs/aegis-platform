@@ -1,13 +1,13 @@
 # ADR-007 — Bounded Provider Retries
 
-- **Status:** Proposed — mark Accepted only after review
+- **Status:** Accepted (2026-11-20, Day 14 review)
 - **Date:** 2026-10-28
 
 ## Context
 Aegis supports multiple LLM providers behind a common protocol. Transient failures should be recoverable without unbounded latency or duplicated streamed output.
 
 ## Decision
-Adopt a provider-neutral retry decorator that wraps the existing `LLMProvider`, retries only an explicit allowlist of normalized transient exceptions, uses bounded exponential backoff with jitter, enforces a total deadline, propagates cancellation, retries streaming only before the first chunk, and emits metadata-only logs. Compose it exactly once. Cross-provider failover is out of scope.
+Adopt a provider-neutral retry decorator that wraps the existing `LLMProvider`, retries only an explicit allowlist of normalized transient exceptions, uses bounded exponential backoff with jitter, enforces a total deadline, propagates cancellation, retries streaming only before the first chunk, and emits metadata-only logs. Compose it exactly once; provider SDK clients are created with `max_retries=0` so no hidden retry layer stacks underneath. The policy is configured through `Settings` (`LLM_RETRY_*`). Cross-provider failover is out of scope.
 
 ## Alternatives
 - **Retries in each adapter:** rejected because policy is duplicated.
