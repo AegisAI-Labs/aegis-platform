@@ -3,11 +3,11 @@
 # Software Requirements Specification
 >A SRS is a document that **describes what the software will do** and how it will be expected to perform. Acts as a contract between the client and the developer.
 
-**Version:** 1.7
+**Version:** 1.9
 **Status:** Active
 **Owner:** Kader Beevi
 **Project:** Aegis AI Platform
-**Last Updated:** 2026-11-15
+**Last Updated:** 2026-11-20
 
 ## Related Artifacts
 
@@ -38,6 +38,7 @@
 | 1.6 | 2026-11-02 | LLM Observability and Monitoring. |
 | 1.7 | 2026-11-15 | RAG Foundation: added FR-013 (chunking, storage abstractions, factory pattern) and NFR-008 (provider independence, extensibility, configuration-driven behavior). |
 | 1.8 | 2026-11-15 | RAG Phase 2 Implementation: added FR-014 (OpenAI EmbeddingProvider), FR-015 (Qdrant VectorStore), FR-016 (Factory extension), and NFR-009 (implementation quality: type safety, testing, error handling). |
+| 1.9 | 2026-11-20 | Day 16: added FR-017 (RAG retrieval path contract, incl. FR-RAG-017-003 embedding usage) and FR-018 (retrieval safety layers, retroactive). Header version corrected (was 1.7). |
 
 ---
 
@@ -325,7 +326,7 @@ The platform shall support Retrieval-Augmented Generation with provider-agnostic
 - Available strategies shall be discoverable via `get_available_strategies()`.
 
 ### FR-RAG-006 — Document Models
-- The platform shall define data models for: Document, Chunk, EmbeddingRequest, EmbeddingResponse, SearchResult.
+- The platform shall define data models for: Document, Chunk, EmbeddingRequest, EmbeddingResponse, EmbeddingUsage, SearchResult (embedding request/response shape per ADR-013).
 - Chunk model shall include: text, chunk_id, sequence, start_pos, end_pos, metadata.
 - Document model shall include: doc_id, content, metadata, source.
 
@@ -435,6 +436,54 @@ Acceptance Criteria:
 - 2 integration tests cover: environment variable configuration, end-to-end usage.
 - Type checking passes (mypy --strict).
 - Linting passes (ruff).
+
+---
+
+## FR-017 - RAG Retrieval Path Contract (Day 16, ADR-012)
+
+### FR-RAG-017-001 — Embedder Conformance
+- Every embedding provider shall implement `embed_text(str) -> np.ndarray` and
+  `embed_batch(list[str]) -> list[np.ndarray]`, with output order and length matching the input.
+- Batches larger than the provider limit shall be split into several API calls.
+- Asymmetric models shall receive `input_type` = `query` for searches and `passage` for ingested text.
+- Only transient failures (rate limit, 5xx, connection) shall be retried; client errors and quota
+  exhaustion shall fail immediately without exposing response bodies.
+
+### FR-RAG-017-003 — Embedding Usage (ADR-013)
+- `EmbeddingProvider.embed(EmbeddingRequest) -> EmbeddingResponse` shall return vectors, the serving model
+  and token usage summed over API calls; usage shall be `None` when any call does not report it.
+- Ingestion and search results shall include `embedding_tokens`.
+
+### FR-RAG-017-002 — Vector Store Behavior
+- Point IDs shall be deterministic across processes; re-ingesting a chunk shall overwrite it.
+- Re-ingesting a document shall replace all of its chunks; chunks from an older, longer version shall be
+  removed, and a failed ingest shall leave the previous version searchable.
+- The collection shall be created on first insert with the embedding dimension and configured metric;
+  existing collections shall never be dropped implicitly.
+- Searching before any ingestion shall return no results rather than an error.
+- The collection shall be configurable (`RAG_COLLECTION`). A collection shall record the embedding model,
+  dimension and metric it was built with, and operations shall be refused when the current configuration
+  differs, so vectors from different models are never mixed.
+- `/rag/health` shall fail when the embedder or the vector store is unavailable.
+- `/rag/collections` shall return name, vector size, point count and distance for each collection.
+
+Acceptance Criteria:
+
+- Real qdrant-client (local mode) tests cover ingest, search, re-ingest, >100 chunks, collections, health.
+- Mocked-HTTP tests cover NVIDIA `input_type`, batching, fail-fast and retry behavior.
+
+---
+
+## FR-018 - RAG Retrieval Safety Layers (Day 12, recorded Day 16, ADR-012)
+
+- Queries shall pass length and injection guardrails before retrieval; LLM query expansions shall be
+  re-checked.
+- Results shall be filtered by per-chunk access level, allowed roles and organization.
+- Organization-scoped, non-public documents shall be readable only by callers of the same organization,
+  including callers that send no organization.
+- Returned text shall be PII-masked; retrieval shall fail closed if masking is unavailable.
+- Optional cross-encoder reranking shall be available via `?rerank=true`.
+- `/rag/verify` shall report citation coverage and hallucination risk for a supplied answer.
 
 ---
 

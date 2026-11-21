@@ -251,6 +251,19 @@ class DocumentAccessControl:
                 risk_level="medium",
             )
 
+        # A caller without an organization must not read another tenant's non-public
+        # documents (previously the tenant check was skipped when X-Organization-Id was absent).
+        if (
+            doc.organization_id
+            and not user.organization_id
+            and doc.access_level != AccessLevel.PUBLIC
+        ):
+            return AccessCheckResult(
+                is_allowed=False,
+                reason="Organization-scoped document requires a matching organization",
+                risk_level="medium",
+            )
+
         return self._check_access_by_level(user, doc, operation)
 
     async def check_access_batch(

@@ -9,20 +9,74 @@ using Qdrant as the backend. It supports:
 - Batch operations for efficiency
 - Health checks and error handling
 
-Qdrant can run locally via Docker or be configured for remote access.
+Qdrant can run locally via Docker, remotely, or in-process with ``url=":memory:"``
+(qdrant-client local mode; used for tests and local experiments).
+
+Point IDs: Qdrant accepts unsigned integers or UUIDs. Caller IDs such as ``"doc-1#0"`` are
+mapped to deterministic UUIDv5 values, so re-ingesting the same chunk overwrites it instead of
+creating a duplicate, and the mapping is stable across processes and restarts.
 """
 
+import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    HasIdCondition,
+    MatchValue,
+    PayloadSchemaType,
+    PointIdsList,
     PointStruct,
     VectorParams,
 )
 
 from aegis_platform.rag.models import SearchResult
+
+logger = logging.getLogger(__name__)
+
+IN_MEMORY_URL = ":memory:"
+
+# Payload field identifying a chunk's document; indexed so per-document cleanup is a
+# filtered lookup rather than a full scan (and works on clusters that require indexes).
+DOCUMENT_ID_FIELD = "document_id"
+
+# Fixed namespace so the same caller ID always maps to the same point ID.
+# NEVER change this value: existing points would no longer match their chunk IDs, so
+# delete/update by ID would silently miss them. It is deliberately not configurable;
+# separate collections already have separate ID spaces (see ADR-012).
+_POINT_ID_NAMESPACE = uuid.UUID("6f1c2a4e-3b8d-5e2f-9a7c-1d4b6e8f0a3c")
+
+_DISTANCES = {
+    "cosine": Distance.COSINE,
+    "euclidean": Distance.EUCLID,
+    "manhattan": Distance.MANHATTAN,
+}
+
+
+class CollectionMismatchError(RuntimeError):
+    """The collection was built with a different embedding model, dimension or metric.
+
+    Vectors from different models are not comparable, so mixing them silently ruins
+    search quality. Use a new collection (RAG_COLLECTION) or recreate this one.
+    """
+
+
+def to_point_id(raw_id: str) -> int | str:
+    """Map a caller ID to a stable Qdrant point ID.
+
+    Plain non-negative integers are kept as integers; every other string becomes a
+    deterministic UUIDv5. (Python's ``hash()`` was used before; it is randomized per
+    process, so IDs changed after every restart.)
+    """
+    if raw_id.isdigit():
+        return int(raw_id)
+    return str(uuid.uuid5(_POINT_ID_NAMESPACE, raw_id))
 
 
 @dataclass
@@ -35,6 +89,8 @@ class QdrantVectorStoreConfig:
         timeout: Request timeout in seconds
         embedding_dimension: Embedding vector dimension (must match provider)
         distance_metric: Distance metric for similarity ("cosine", "euclidean", "manhattan")
+        embedding_model: Embedding model that produces the vectors. Recorded in the metadata
+            of collections this store creates and checked against existing collections.
     """
 
     url: str
@@ -42,6 +98,7 @@ class QdrantVectorStoreConfig:
     timeout: int = 30
     embedding_dimension: int = 1536
     distance_metric: str = "cosine"
+    embedding_model: str | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.
@@ -83,11 +140,116 @@ class QdrantVectorStore:
         """
         config.validate()
         self.config = config
-        self.client = AsyncQdrantClient(
-            url=config.url,
-            api_key=config.api_key,
-            timeout=config.timeout,
+        if config.url == IN_MEMORY_URL:
+            self.client = AsyncQdrantClient(location=IN_MEMORY_URL)
+        else:
+            self.client = AsyncQdrantClient(
+                url=config.url,
+                api_key=config.api_key,
+                timeout=config.timeout,
+            )
+        self._known_collections: set[str] = set()
+
+    def _collection_metadata(self, dimension: int, distance_metric: str) -> dict[str, Any]:
+        return {
+            "embedding_model": self.config.embedding_model,
+            "embedding_dimension": dimension,
+            "distance_metric": distance_metric,
+        }
+
+    @staticmethod
+    def _describe(model: Any, dimension: Any, distance: Any) -> str:
+        return f"{model or 'unknown model'} (dimension {dimension}, {distance})"
+
+    async def verify_collection(self, collection: str) -> bool:
+        """Check that ``collection`` matches this store's embedding configuration.
+
+        Returns:
+            False if the collection does not exist, True if it exists and matches.
+
+        Raises:
+            CollectionMismatchError: If it was built with a different model, dimension or
+                distance metric.
+            RuntimeError: If the collection cannot be inspected.
+        """
+        if collection in self._known_collections:
+            return True
+
+        try:
+            if not await self.client.collection_exists(collection_name=collection):
+                return False
+            stats = await self.collection_stats(collection)
+            info = await self.client.get_collection(collection_name=collection)
+        except Exception as e:
+            raise RuntimeError(f"Failed to inspect collection {collection!r}: {e!s}") from e
+
+        metadata = getattr(info.config, "metadata", None) or {}
+        stored_model = metadata.get("embedding_model")
+        expected_distance = str(_DISTANCES[self.config.distance_metric].value).lower()
+
+        model_differs = bool(
+            stored_model
+            and self.config.embedding_model
+            and stored_model != self.config.embedding_model
         )
+        if (
+            stats["vector_size"] != self.config.embedding_dimension
+            or stats["distance"] != expected_distance
+            or model_differs
+        ):
+            built = self._describe(stored_model, stats["vector_size"], stats["distance"])
+            current = self._describe(
+                self.config.embedding_model, self.config.embedding_dimension, expected_distance
+            )
+            raise CollectionMismatchError(
+                f"Collection {collection!r} was built with {built}; the current configuration "
+                f"is {current}. Set RAG_COLLECTION to a new collection and re-ingest, "
+                "or recreate this one."
+            )
+
+        if not stored_model:
+            logger.warning(
+                "Collection %r has no recorded embedding model; only dimension and metric "
+                "were verified",
+                collection,
+            )
+
+        self._known_collections.add(collection)
+        return True
+
+    async def ensure_collection(self, collection: str) -> bool:
+        """Create ``collection`` for this store's configuration, or verify the existing one.
+
+        Returns:
+            True if the collection was created, False if it already existed (and matches).
+
+        Raises:
+            CollectionMismatchError: If an existing collection does not match.
+        """
+        if await self.verify_collection(collection):
+            return False
+
+        try:
+            await self.client.create_collection(
+                collection_name=collection,
+                vectors_config=VectorParams(
+                    size=self.config.embedding_dimension,
+                    distance=_DISTANCES[self.config.distance_metric],
+                ),
+                metadata=self._collection_metadata(
+                    self.config.embedding_dimension, self.config.distance_metric
+                ),
+            )
+            await self.client.create_payload_index(
+                collection_name=collection,
+                field_name=DOCUMENT_ID_FIELD,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to ensure collection {collection!r}: {e!s}") from e
+
+        self._known_collections.add(collection)
+        return True
 
     async def insert(
         self,
@@ -137,12 +299,14 @@ class QdrantVectorStore:
         # Create point structures with metadata as payload
         points = [
             PointStruct(
-                id=int(pid) if pid.isdigit() else hash(pid) % (2**31),
+                id=to_point_id(pid),
                 vector=vector,
                 payload=meta,
             )
-            for pid, vector, meta in zip(ids, vectors, metadata)
+            for pid, vector, meta in zip(ids, vectors, metadata, strict=True)
         ]
+
+        await self.ensure_collection(collection)
 
         try:
             await self.client.upsert(
@@ -184,16 +348,21 @@ class QdrantVectorStore:
         if limit <= 0:
             raise ValueError("limit must be positive")
 
+        if not await self.verify_collection(collection):
+            # Nothing has been ingested yet: an empty result, not an error.
+            return []
+
         try:
-            results = await self.client.search(  # type: ignore[attr-defined]
+            response = await self.client.query_points(
                 collection_name=collection,
-                query_vector=vector,
+                query=vector,
                 limit=limit,
                 score_threshold=score_threshold,
+                with_payload=True,
             )
 
             search_results = []
-            for result in results:
+            for result in response.points:
                 payload = result.payload or {}
                 search_results.append(
                     SearchResult(
@@ -228,19 +397,48 @@ class QdrantVectorStore:
             raise ValueError("Cannot delete empty ID list")
 
         try:
-            # Convert string IDs to integers
-            int_ids = [
-                int(id_str) if id_str.isdigit() else hash(id_str) % (2**31) for id_str in ids
-            ]
-
             await self.client.delete(
                 collection_name=collection,
-                points_selector=int_ids,  # type: ignore[arg-type]
+                points_selector=PointIdsList(points=[to_point_id(id_str) for id_str in ids]),
             )
 
             return len(ids)
         except Exception as e:
             raise RuntimeError(f"Failed to delete vectors: {e!s}") from e
+
+    async def delete_stale_chunks(
+        self, collection: str, document_id: str, keep_ids: list[str]
+    ) -> int:
+        """Delete ``document_id``'s points whose IDs are not in ``keep_ids``.
+
+        Run after upserting the current version, so the document is never missing from search;
+        also removes points left from before deterministic IDs (ADR-012).
+        """
+        if not document_id:
+            raise ValueError("document_id is required")
+
+        stale = Filter(
+            must=[FieldCondition(key=DOCUMENT_ID_FIELD, match=MatchValue(value=document_id))],
+            must_not=[HasIdCondition(has_id=[to_point_id(i) for i in keep_ids])]
+            if keep_ids
+            else [],
+        )
+
+        if not await self.verify_collection(collection):
+            return 0
+
+        try:
+            count = (
+                await self.client.count(collection_name=collection, count_filter=stale, exact=True)
+            ).count
+            if count:
+                await self.client.delete(
+                    collection_name=collection,
+                    points_selector=FilterSelector(filter=stale),
+                )
+            return count
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete stale chunks: {e!s}") from e
 
     async def update(
         self,
@@ -278,13 +476,9 @@ class QdrantVectorStore:
             metadata = [{} for _ in ids]
 
         try:
-            int_ids = [
-                int(id_str) if id_str.isdigit() else hash(id_str) % (2**31) for id_str in ids
-            ]
-
             points = [
-                PointStruct(id=pid, vector=vector, payload=meta)
-                for pid, vector, meta in zip(int_ids, vectors, metadata)
+                PointStruct(id=to_point_id(pid), vector=vector, payload=meta)
+                for pid, vector, meta in zip(ids, vectors, metadata, strict=True)
             ]
 
             await self.client.upsert(
@@ -325,23 +519,29 @@ class QdrantVectorStore:
         if dimension <= 0:
             raise ValueError("dimension must be positive")
 
-        distance_map = {
-            "cosine": Distance.COSINE,
-            "euclidean": Distance.EUCLID,
-            "manhattan": Distance.MANHATTAN,
-        }
-
-        distance = distance_map.get(distance_metric)
+        distance = _DISTANCES.get(distance_metric)
         if not distance:
             raise ValueError(f"Unknown distance metric: {distance_metric}")
 
         try:
-            await self.client.recreate_collection(
+            exists = await self.client.collection_exists(collection_name=collection)
+        except Exception as e:
+            raise RuntimeError(f"Failed to create collection: {e!s}") from e
+
+        if exists:
+            # Never drop data implicitly (the previous recreate_collection call deleted it).
+            raise ValueError(f"Collection already exists: {collection}")
+
+        try:
+            await self.client.create_collection(
                 collection_name=collection,
                 vectors_config=VectorParams(size=dimension, distance=distance),
+                metadata=self._collection_metadata(dimension, distance_metric),
             )
         except Exception as e:
             raise RuntimeError(f"Failed to create collection: {e!s}") from e
+
+        self._known_collections.add(collection)
 
     async def delete_collection(self, collection: str) -> None:
         """Delete a collection.
@@ -357,6 +557,8 @@ class QdrantVectorStore:
             await self.client.delete_collection(collection_name=collection)
         except Exception as e:
             raise RuntimeError(f"Failed to delete collection: {e!s}") from e
+        finally:
+            self._known_collections.discard(collection)
 
     async def collection_stats(self, collection: str) -> dict[str, Any]:
         """Get statistics about a collection.
@@ -382,10 +584,10 @@ class QdrantVectorStore:
 
             return {
                 "name": collection,
-                "point_count": collection_info.points_count,
+                "point_count": collection_info.points_count or 0,
                 "vector_size": vector_size,
-                "distance": str(distance),
-                "status": str(collection_info.status),
+                "distance": str(getattr(distance, "value", distance)).lower(),
+                "status": str(getattr(collection_info.status, "value", collection_info.status)),
             }
         except Exception as e:
             raise RuntimeError(f"Failed to get collection stats: {e!s}") from e

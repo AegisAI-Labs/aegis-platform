@@ -1,27 +1,47 @@
 """Data models for RAG (Retrieval-Augmented Generation) system."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Literal
+
+import numpy as np
+
+QUERY: Literal["query"] = "query"
+PASSAGE: Literal["passage"] = "passage"
+InputType = Literal["query", "passage"]
 
 
-@dataclass
+@dataclass(frozen=True)
 class EmbeddingRequest:
-    """Request for embedding generation."""
+    """Texts to embed in one logical call (ADR-013).
 
-    text: str
-    model: str | None = None
+    ``input_type`` tells asymmetric retrieval models whether the texts are search queries or
+    stored passages; symmetric providers ignore it.
+    """
+
+    texts: list[str]
+    input_type: InputType = PASSAGE
 
 
-@dataclass
+@dataclass(frozen=True)
+class EmbeddingUsage:
+    """Token usage for a whole request (summed over the API calls it was split into).
+
+    ``None`` means the provider did not report usage for at least one call.
+    """
+
+    input_tokens: int | None = None
+
+
+@dataclass(frozen=True)
 class EmbeddingResponse:
-    """Response containing generated embeddings."""
+    """Vectors aligned with ``EmbeddingRequest.texts`` plus serving metadata."""
 
-    text: str
-    embedding: list[float]
+    embeddings: list[np.ndarray]
     model: str
+    provider: str
     dimension: int
-    tokens_used: int = 0
+    usage: EmbeddingUsage | None = None
 
 
 @dataclass
@@ -45,8 +65,8 @@ class Document:
     title: str
     content: str
     source: str
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     chunks: list[Chunk] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 

@@ -88,6 +88,11 @@ class IngestResponse(BaseModel):
     chunks_created: int = Field(..., description="Total chunks created", ge=0)
     documents_stored: int = Field(..., description="Documents processed", ge=0)
     latency_ms: float = Field(..., description="Ingestion latency in milliseconds", ge=0)
+    chunks_removed: int = Field(
+        default=0,
+        description="Chunks from previous versions of these documents that were removed",
+        ge=0,
+    )
 
 
 class SearchResult(BaseModel):
@@ -215,6 +220,7 @@ class HealthCheckResponse(BaseModel):
     embedding_provider: str = Field(..., description="Embedding provider name")
     embedding_model: str = Field(..., description="Embedding model name")
     vector_store: str = Field(..., description="Vector store type")
+    collection: str | None = Field(default=None, description="Collection in use")
     latency_ms: float = Field(..., description="Health check latency", ge=0)
 
 

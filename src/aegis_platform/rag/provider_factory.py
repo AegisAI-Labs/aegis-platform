@@ -68,7 +68,7 @@ def create_embedding_provider(
     """
     # Determine provider from config type
     if isinstance(config, OpenAIEmbeddingConfig):
-        return OpenAIEmbedding(config)  # type: ignore[return-value]
+        return OpenAIEmbedding(config)
     elif isinstance(config, NVIDIAEmbeddingConfig):
         return NVIDIAEmbeddingProvider(config)
     else:

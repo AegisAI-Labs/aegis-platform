@@ -47,7 +47,7 @@ from aegis_platform.rag.secure_retrieval import (
     secure_retrieve,
     verify_answer,
 )
-from aegis_platform.rag.service import RAGService
+from aegis_platform.rag.service import DEFAULT_COLLECTION, RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +95,44 @@ def get_configured_embedding_provider() -> EmbeddingProvider:
     raise ValueError(f"Unknown embedding provider: {provider_name}")
 
 
-def get_configured_vector_store() -> VectorStore:
+def embedding_dimension_for(provider: EmbeddingProvider) -> int:
+    """Vector size produced by ``provider``; the vector store must use the same size."""
+    config = getattr(provider, "config", None)
+    for attribute in ("dimension", "embedding_dimension"):
+        value = getattr(config, attribute, None)
+        if isinstance(value, int) and value > 0:
+            return value
+    return int(_env("RAG_EMBEDDING_DIMENSION") or 1536)
+
+
+def embedding_model_for(provider: EmbeddingProvider) -> str | None:
+    """Model name of ``provider``; recorded on new collections and checked on existing ones."""
+    model = getattr(provider, "model", None) or getattr(
+        getattr(provider, "config", None), "model", None
+    )
+    return str(model) if model else None
+
+
+def get_configured_collection() -> str:
+    """Collection for RAG data (RAG_COLLECTION, default "documents").
+
+    Use a separate collection per embedding model; switching models means re-ingesting
+    into a new collection.
+    """
+    return _env("RAG_COLLECTION") or DEFAULT_COLLECTION
+
+
+def get_configured_vector_store(
+    embedding_dimension: int | None = None,
+    embedding_model: str | None = None,
+) -> VectorStore:
     """
     Load vector store from configuration.
 
     Reads RAG_VECTOR_STORE_URL / RAG_VECTOR_STORE_API_KEY (falling back to QDRANT_URL /
-    QDRANT_API_KEY) and RAG_VECTOR_STORE_DISTANCE_METRIC.
+    QDRANT_API_KEY) and RAG_VECTOR_STORE_DISTANCE_METRIC. ``embedding_dimension`` must match
+    the embedding provider (falls back to RAG_EMBEDDING_DIMENSION, then 1536).
+    Use ``RAG_VECTOR_STORE_URL=:memory:`` for an in-process store (local experiments).
     Currently supports: "qdrant"
 
     Returns:
@@ -121,6 +153,8 @@ def get_configured_vector_store() -> VectorStore:
             url=_env("RAG_VECTOR_STORE_URL", "QDRANT_URL") or "http://localhost:6333",
             api_key=_env("RAG_VECTOR_STORE_API_KEY", "QDRANT_API_KEY"),
             distance_metric=_env("RAG_VECTOR_STORE_DISTANCE_METRIC") or "cosine",
+            embedding_dimension=embedding_dimension or int(_env("RAG_EMBEDDING_DIMENSION") or 1536),
+            embedding_model=embedding_model,
         )
         return create_vector_store(config)
     else:
@@ -173,7 +207,11 @@ def get_rag_service() -> RAGService:
     """
     try:
         embedding_provider = get_configured_embedding_provider()
-        vector_store = get_configured_vector_store()
+        vector_store = get_configured_vector_store(
+            embedding_dimension_for(embedding_provider),
+            embedding_model_for(embedding_provider),
+        )
+        collection = get_configured_collection()
 
         logger.info(
             "Initializing RAG Service with provider=%s, vector_store=%s",
@@ -184,6 +222,7 @@ def get_rag_service() -> RAGService:
         return RAGService(
             embedding_provider=embedding_provider,
             vector_store=vector_store,
+            collection=collection,
         )
     except Exception as e:
         logger.error("Failed to initialize RAG Service: %s", e)
@@ -330,10 +369,14 @@ async def ingest_documents(
     """
     Ingest documents: chunk, embed, and store in vector database.
 
-    Pipeline:
+    Pipeline (see RAGService.ingest_documents):
     1. Chunk documents using configured strategy
-    2. Generate embeddings for all chunks
-    3. Store chunks, embeddings and access metadata in vector database
+    2. Generate embeddings for all chunks (as passages)
+    3. Upsert chunks, embeddings and access metadata into the vector database
+    4. Remove chunks left from a previous version of each document
+
+    Re-ingesting a doc_id replaces that document; ``chunks_removed`` in the response
+    reports how many outdated chunks were deleted.
 
     Each document's access_level, allowed_roles and organization_id are stored with
     its chunks and enforced by /search and /query. organization_id defaults to the
@@ -345,7 +388,7 @@ async def ingest_documents(
         user: Caller identity (injected from headers)
 
     Returns:
-        IngestResponse with chunk and document counts, latency
+        IngestResponse with chunks created, documents stored, chunks removed, latency
 
     Raises:
         HTTPException (400): If document list is empty or invalid
@@ -385,9 +428,10 @@ async def ingest_documents(
         result = await service.ingest_documents(documents)
 
         logger.info(
-            "Documents ingested: docs=%d, chunks=%d, latency_ms=%.1f",
+            "Documents ingested: docs=%d, chunks=%d, removed=%d, latency_ms=%.1f",
             result["documents_stored"],
             result["chunks_created"],
+            result.get("chunks_removed", 0),
             result["latency_ms"],
         )
 
@@ -711,11 +755,12 @@ All endpoints use dependency injection with @lru_cache singleton pattern
 for RAGService initialization (ADR-010).
 
 Configuration:
-- RAG_EMBEDDING_PROVIDER: "openai" (default; the only provider wired here)
+- RAG_EMBEDDING_PROVIDER: "openai" (default) or "nvidia"
 - RAG_EMBEDDING_KEY or OPENAI_API_KEY: API key for the embedding provider
 - RAG_VECTOR_STORE_URL or QDRANT_URL: Qdrant endpoint
 - RAG_VECTOR_STORE_API_KEY or QDRANT_API_KEY: Qdrant API key
 - RAG_VECTOR_STORE_DISTANCE_METRIC: cosine (default), euclidean, manhattan
+- RAG_COLLECTION: collection name (default "documents"); use one per embedding model
 
 Identity headers: X-User-Id, X-User-Role, X-Organization-Id (trusted; set by gateway).
 

@@ -399,6 +399,42 @@ longer uses `eval`, and routing uses whole words.
 
 ---
 
+## Day 16 - RAG Real Path: Embedder Contract, Qdrant Fixes, Tenant Isolation
+
+## Overview
+Makes the embed → Qdrant path work outside tests and records the Day 12 safety layers. Defects fixed:
+OpenAI embedder signature, missing `client.search`, per-process point IDs, missing collection, fixed
+dimension, `/rag/collections` schema, always-healthy health check, missing NVIDIA `input_type`, retries of
+non-retryable errors, tenant check skipped without an organization header.
+
+## Feature Traceability
+
+| Stage | Reference |
+|--------|-----------|
+| ADR | AEGIS-ADR-012 (new) — retrieval path contract and safety layers (retroactive); AEGIS-ADR-013 (new) — embedding request/response with usage |
+| SRS | AEGIS-SRS-001 v1.9 — FR-017, FR-018 |
+| Implementation | `rag/embeddings/openai.py`, `rag/embeddings/nvidia.py`, `rag/embeddings/base.py`, `rag/embeddings/usage.py` (new), `rag/storage/qdrant.py`, `rag/storage/__init__.py` (duplicate protocol removed), `rag/service.py`, `rag/access_control.py`, `rag/models.py` (timezone-aware timestamps), `rag/provider_factory.py`, `api/rag.py` |
+| Configuration | `.env.example`: `RAG_EMBEDDING_SEND_INPUT_TYPE`, `:memory:` vector store note |
+| Tests | `tests/integration/rag/test_rag_service_real_path.py`, `tests/unit/rag/test_storage_qdrant_local.py`, `tests/unit/rag/test_embeddings_nvidia.py` (new); `tests/unit/rag/test_embeddings_openai.py` rewritten; mock-based Qdrant tests replaced |
+
+## Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Embedders conform to `EmbeddingProvider`; >100 chunks ingest | ✅ |
+| Qdrant search via `query_points`; collection auto-created with provider dimension | ✅ |
+| Point IDs identical across processes; re-ingest does not duplicate | ✅ |
+| Re-ingest replaces a document (stale tail chunks and pre-Day-16 points removed; `chunks_removed` reported) | ✅ |
+| Configurable collection (`RAG_COLLECTION`); collection records its embedding model and refuses a different model/dimension/metric | ✅ |
+| `/rag/collections` returns 200 with collection info; health fails when store is down | ✅ |
+| NVIDIA `input_type` query/passage; 4xx and quota errors fail fast | ✅ |
+| `embed()` returns vectors, serving model and summed token usage; ingest/search report `embedding_tokens` | ✅ |
+| Callers without organization cannot read other tenants' non-public documents | ✅ |
+| Live: Qdrant Cloud `/rag/collections` (read-only) → 200 | ✅ |
+| Live: embeddings end to end | ⛔ Blocked externally — NVIDIA embeddings 503 "Service is overloaded"; OpenAI account `insufficient_quota`. Re-run when a provider is available. |
+
+---
+
 # Cross-Reference Matrix
 
 | Artifact | Connected Documents |

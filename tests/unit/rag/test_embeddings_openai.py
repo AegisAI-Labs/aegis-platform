@@ -2,14 +2,17 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import numpy as np
 import pytest
 from openai import RateLimitError
 
+from aegis_platform.rag.embeddings.base import EmbeddingProvider
 from aegis_platform.rag.embeddings.openai import (
     OpenAIEmbedding,
     OpenAIEmbeddingConfig,
 )
-from aegis_platform.rag.models import EmbeddingRequest
+from aegis_platform.rag.embeddings.usage import sum_usage
+from aegis_platform.rag.models import EmbeddingRequest, EmbeddingUsage
 
 
 class TestOpenAIEmbeddingConfig:
@@ -83,345 +86,271 @@ class TestOpenAIEmbeddingInitialization:
             OpenAIEmbedding(config)
 
 
+def sdk_response(*vectors: list[float], shuffled: bool = False) -> MagicMock:
+    """Build an OpenAI embeddings response; ``shuffled`` returns items out of order."""
+    items = [MagicMock(embedding=vector, index=i) for i, vector in enumerate(vectors)]
+    if shuffled:
+        items.reverse()
+    response = MagicMock()
+    response.data = items
+    response.usage = MagicMock(prompt_tokens=10)
+    return response
+
+
+def rate_limited() -> RateLimitError:
+    return RateLimitError("Rate limited", response=MagicMock(), body={})
+
+
+@pytest.fixture
+def provider() -> OpenAIEmbedding:
+    return OpenAIEmbedding(OpenAIEmbeddingConfig(api_key="sk-test", max_retries=3, batch_size=2))
+
+
+@pytest.fixture(autouse=True)
+def no_backoff_sleep():
+    with patch(
+        "aegis_platform.rag.embeddings.openai.asyncio.sleep", new_callable=AsyncMock
+    ) as sleep:
+        yield sleep
+
+
+class TestProtocolConformance:
+    def test_is_an_embedding_provider(self, provider):
+        assert isinstance(provider, EmbeddingProvider)
+
+    def test_sdk_retries_disabled(self, provider):
+        assert provider.client.max_retries == 0
+
+    def test_model_property(self, provider):
+        assert provider.model == "text-embedding-3-small"
+
+
 class TestOpenAIEmbeddingTextEmbedding:
-    """Test single text embedding."""
+    """embed_text(str) -> np.ndarray, as RAGService calls it."""
 
     @pytest.mark.asyncio
-    async def test_embed_text_success(self):
-        """Test successful single text embedding."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_embed_text_returns_numpy_vector(self, provider):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.return_value = sdk_response([0.1, 0.2, 0.3] * 512)
 
-        mock_response = MagicMock()
-        mock_response.data = [
-            MagicMock(embedding=[0.1, 0.2, 0.3] * 512)  # 1536 dims
-        ]
-        mock_response.usage = MagicMock(prompt_tokens=10)
+            vector = await provider.embed_text("  Hello world  ")
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            request = EmbeddingRequest(text="Hello world")
-            response = await provider.embed_text(request)
-
-            assert response.text == "Hello world"
-            assert len(response.embedding) == 1536
-            assert response.dimension == 1536
-            assert response.model == "text-embedding-3-small"
+        assert isinstance(vector, np.ndarray)
+        assert vector.shape == (1536,)
+        assert vector.dtype == np.float32
+        assert create.call_args.kwargs == {
+            "input": ["Hello world"],
+            "model": "text-embedding-3-small",
+        }
 
     @pytest.mark.asyncio
-    async def test_embed_text_empty_raises(self):
-        """Test empty text raises error."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
-
-        request = EmbeddingRequest(text="")
+    @pytest.mark.parametrize("text", ["", "   \n\t  "])
+    async def test_embed_text_rejects_empty(self, provider, text):
         with pytest.raises(ValueError, match="Cannot embed empty text"):
-            await provider.embed_text(request)
+            await provider.embed_text(text)
 
     @pytest.mark.asyncio
-    async def test_embed_text_whitespace_only_raises(self):
-        """Test whitespace-only text raises error."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_embed_special_characters(self, provider):
+        special = "Hello! @#$%^&*() 你好 🚀 café"
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.return_value = sdk_response([0.1] * 1536)
 
-        request = EmbeddingRequest(text="   \n\t  ")
-        with pytest.raises(ValueError, match="Cannot embed empty text"):
-            await provider.embed_text(request)
+            await provider.embed_text(special)
 
-    @pytest.mark.asyncio
-    async def test_embed_text_strips_whitespace(self):
-        """Test text is stripped before embedding."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
-
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        mock_response.usage = MagicMock(prompt_tokens=5)
-
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            request = EmbeddingRequest(text="  hello world  ")
-            response = await provider.embed_text(request)
-
-            assert response.text == "hello world"
-            mock_create.assert_called_once()
-            call_args = mock_create.call_args
-            assert call_args[1]["input"] == ["hello world"]
+        assert create.call_args.kwargs["input"] == [special]
 
 
 class TestOpenAIEmbeddingBatch:
-    """Test batch embedding."""
+    """embed_batch keeps order and length aligned with its input."""
 
     @pytest.mark.asyncio
-    async def test_embed_batch_success(self):
-        """Test successful batch embedding."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_batch_splits_into_api_calls(self, provider):
+        texts = ["a", "b", "c", "d", "e"]  # batch_size=2 -> 3 calls
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = [
+                sdk_response([1.0], [2.0]),
+                sdk_response([3.0], [4.0]),
+                sdk_response([5.0]),
+            ]
 
-        mock_response = MagicMock()
-        mock_response.data = [
-            MagicMock(embedding=[0.1] * 1536),
-            MagicMock(embedding=[0.2] * 1536),
-            MagicMock(embedding=[0.3] * 1536),
-        ]
-        mock_response.usage = MagicMock(prompt_tokens=30)
+            vectors = await provider.embed_batch(texts)
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            texts = ["text 1", "text 2", "text 3"]
-            responses = await provider.embed_batch(texts)
-
-            assert len(responses) == 3
-            for i, response in enumerate(responses):
-                assert response.text == texts[i]
-                assert len(response.embedding) == 1536
+        assert [v.tolist() for v in vectors] == [[1.0], [2.0], [3.0], [4.0], [5.0]]
+        assert [c.kwargs["input"] for c in create.call_args_list] == [["a", "b"], ["c", "d"], ["e"]]
 
     @pytest.mark.asyncio
-    async def test_embed_batch_empty_raises(self):
-        """Test empty batch raises error."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_more_than_100_texts_are_accepted(self):
+        provider = OpenAIEmbedding(OpenAIEmbeddingConfig(api_key="sk-test"))  # batch_size=100
+        texts = [f"chunk {i}" for i in range(250)]
 
+        async def fake_create(input, model):
+            return sdk_response(*([float(i)] for i in range(len(input))))
+
+        with patch.object(provider.client.embeddings, "create", side_effect=fake_create) as create:
+            vectors = await provider.embed_batch(texts)
+
+        assert len(vectors) == 250
+        assert create.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_out_of_order_api_items_are_realigned(self, provider):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.return_value = sdk_response([1.0], [2.0], shuffled=True)
+
+            vectors = await provider.embed_batch(["first", "second"])
+
+        assert [v.tolist() for v in vectors] == [[1.0], [2.0]]
+
+    @pytest.mark.asyncio
+    async def test_empty_text_is_rejected_not_dropped(self, provider):
+        """Dropping empties would shift every later vector onto the wrong chunk."""
+        with pytest.raises(ValueError, match=r"positions \[1\]"):
+            await provider.embed_batch(["a", "  ", "c"])
+
+    @pytest.mark.asyncio
+    async def test_empty_list_rejected(self, provider):
         with pytest.raises(ValueError, match="Cannot embed empty text list"):
             await provider.embed_batch([])
 
     @pytest.mark.asyncio
-    async def test_embed_batch_exceeds_limit(self):
-        """Test batch exceeding size limit raises error."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test", batch_size=10)
-        provider = OpenAIEmbedding(config)
+    async def test_count_mismatch_from_api_is_an_error(self, provider):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.return_value = sdk_response([1.0])
 
-        texts = [f"text {i}" for i in range(11)]
-        with pytest.raises(ValueError, match="Batch size .* exceeds limit"):
-            await provider.embed_batch(texts)
-
-    @pytest.mark.asyncio
-    async def test_embed_batch_all_empty_raises(self):
-        """Test batch with all empty texts raises error."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
-
-        with pytest.raises(ValueError, match="All texts in batch are empty"):
-            await provider.embed_batch(["", "  ", "\n\t"])
-
-    @pytest.mark.asyncio
-    async def test_embed_batch_filters_empty_texts(self):
-        """Test batch filters out empty texts."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            MagicMock(embedding=[0.1] * 1536),
-            MagicMock(embedding=[0.2] * 1536),
-        ]
-        mock_response.usage = MagicMock(prompt_tokens=20)
-
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            texts = ["text 1", "", "text 2", "   "]
-            responses = await provider.embed_batch(texts)
-
-            assert len(responses) == 2
-            mock_create.assert_called_once()
-            call_args = mock_create.call_args
-            assert call_args[1]["input"] == ["text 1", "text 2"]
+            with pytest.raises(RuntimeError, match="returned 1 vectors for 2 inputs"):
+                await provider.embed_batch(["a", "b"])
 
 
 class TestOpenAIEmbeddingRetry:
-    """Test retry logic for rate limits and connection errors."""
+    @pytest.mark.asyncio
+    async def test_rate_limit_retry_success(self, provider, no_backoff_sleep):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = [rate_limited(), sdk_response([0.5] * 1536)]
+
+            vector = await provider.embed_text("hello")
+
+        assert vector.shape == (1536,)
+        assert create.call_count == 2
+        no_backoff_sleep.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
-    async def test_rate_limit_retry_success(self):
-        """Test rate limit error triggers retry and succeeds."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test", max_retries=3)
-        provider = OpenAIEmbedding(config)
+    async def test_non_retryable_error_fails_fast_without_raw_message(self, provider):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = Exception("secret upstream detail")
 
-        success_response = MagicMock()
-        success_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        success_response.usage = MagicMock(prompt_tokens=10)
+            with pytest.raises(RuntimeError, match=r"Embedding failed \(Exception\)") as raised:
+                await provider.embed_text("hello")
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.side_effect = [
-                RateLimitError("Rate limited", response=MagicMock(), body={}),
-                success_response,
-            ]
-
-            request = EmbeddingRequest(text="hello")
-            response = await provider.embed_text(request)
-
-            assert response.text == "hello"
-            assert mock_create.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_connection_error_retry_success(self):
-        """Test connection error triggers retry and succeeds."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test", max_retries=3)
-        provider = OpenAIEmbedding(config)
-
-        success_response = MagicMock()
-        success_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        success_response.usage = MagicMock(prompt_tokens=10)
-
-        # Use generic Exception which will trigger generic exception handler
-        # Testing that retry mechanism works for any exception
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.side_effect = [
-                Exception("Connection failed"),
-                success_response,
-            ]
-
-            request = EmbeddingRequest(text="hello")
-            # This will fail due to the generic exception handler, which is expected
-            # The retry logic for APIConnectionError is tested separately
-            with pytest.raises(RuntimeError, match="Embedding failed"):
-                await provider.embed_text(request)
+        assert "secret upstream detail" not in str(raised.value)
+        assert create.call_count == 1
 
     @pytest.mark.asyncio
     async def test_max_retries_exhausted(self):
-        """Test error raised when max retries exhausted."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test", max_retries=2)
-        provider = OpenAIEmbedding(config)
+        provider = OpenAIEmbedding(OpenAIEmbeddingConfig(api_key="sk-test", max_retries=2))
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = rate_limited()
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.side_effect = RateLimitError("Rate limited", response=MagicMock(), body={})
+            with pytest.raises(RuntimeError, match="Failed to embed after 2 attempts"):
+                await provider.embed_text("hello")
 
-            request = EmbeddingRequest(text="hello")
-            with pytest.raises(RuntimeError, match="Failed to embed after"):
-                await provider.embed_text(request)
+        assert create.call_count == 2
 
-            assert mock_create.call_count == 2
+    @pytest.mark.asyncio
+    async def test_zero_max_retries_still_makes_one_attempt(self):
+        provider = OpenAIEmbedding(OpenAIEmbeddingConfig(api_key="sk-test", max_retries=0))
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.return_value = sdk_response([0.1])
+
+            await provider.embed_text("hello")
+
+        assert create.call_count == 1
 
 
 class TestOpenAIEmbeddingUtility:
-    """Test utility methods."""
+    @pytest.mark.asyncio
+    async def test_get_dimension(self, provider):
+        assert await provider.get_dimension() == 1536
 
     @pytest.mark.asyncio
-    async def test_get_dimension(self):
-        """Test get_dimension returns correct value."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_health_check_success(self, provider):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.return_value = sdk_response([0.1] * 1536)
 
-        dimension = await provider.get_dimension()
-        assert dimension == 1536
+            assert await provider.health_check() is True
 
     @pytest.mark.asyncio
-    async def test_health_check_success(self):
-        """Test health_check returns True on success."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_health_check_failure(self, provider):
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = Exception("Connection failed")
 
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        mock_response.usage = MagicMock(prompt_tokens=5)
+            assert await provider.health_check() is False
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
 
-            is_healthy = await provider.health_check()
-            assert is_healthy is True
+class TestQuotaExhausted:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"type": "insufficient_quota", "code": "credit_balance_exhausted"},
+            {"error": {"type": "insufficient_quota"}},
+        ],
+    )
+    async def test_quota_errors_fail_fast(self, provider, body):
+        error = RateLimitError("quota", response=MagicMock(), body=body)
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = error
+
+            with pytest.raises(RuntimeError, match="quota exhausted"):
+                await provider.embed_text("hello")
+
+        assert create.call_count == 1
+
+
+class TestEmbedRequestResponse:
+    """embed(EmbeddingRequest) -> EmbeddingResponse with usage (ADR-013)."""
 
     @pytest.mark.asyncio
-    async def test_health_check_failure(self):
-        """Test health_check returns False on failure."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_usage_is_summed_across_api_batches(self, provider):
+        first, second = sdk_response([1.0], [2.0]), sdk_response([3.0])
+        first.usage = MagicMock(prompt_tokens=7)
+        second.usage = MagicMock(prompt_tokens=5)
+        first.model = second.model = "text-embedding-3-small"
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = [first, second]
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.side_effect = Exception("Connection failed")
+            response = await provider.embed(EmbeddingRequest(texts=["a", "b", "c"]))
 
-            is_healthy = await provider.health_check()
-            assert is_healthy is False
-
-
-class TestOpenAIEmbeddingEdgeCases:
-    """Test edge cases and special scenarios."""
-
-    @pytest.mark.asyncio
-    async def test_embed_very_long_text(self):
-        """Test embedding very long text."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
-
-        long_text = "word " * 10000
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        mock_response.usage = MagicMock(prompt_tokens=5000)
-
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            request = EmbeddingRequest(text=long_text)
-            response = await provider.embed_text(request)
-
-            assert len(response.embedding) == 1536
-            assert response.tokens_used == 5000
+        assert response.usage == EmbeddingUsage(input_tokens=12)
+        assert response.provider == "openai"
+        assert response.model == "text-embedding-3-small"
+        assert response.dimension == 1
+        assert [v.tolist() for v in response.embeddings] == [[1.0], [2.0], [3.0]]
 
     @pytest.mark.asyncio
-    async def test_embed_special_characters(self):
-        """Test embedding text with special characters."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_missing_usage_is_unknown_not_partial(self, provider):
+        first, second = sdk_response([1.0], [2.0]), sdk_response([3.0])
+        second.usage = None
+        with patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create:
+            create.side_effect = [first, second]
 
-        special_text = "Hello! @#$%^&*() 你好 🚀 café"
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        mock_response.usage = MagicMock(prompt_tokens=20)
+            response = await provider.embed(EmbeddingRequest(texts=["a", "b", "c"]))
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
-
-            request = EmbeddingRequest(text=special_text)
-            response = await provider.embed_text(request)
-
-            assert response.text == special_text
-            mock_create.assert_called_once()
+        assert response.usage is None
 
     @pytest.mark.asyncio
-    async def test_custom_model_override(self):
-        """Test embedding with custom model override."""
-        config = OpenAIEmbeddingConfig(api_key="sk-test")
-        provider = OpenAIEmbedding(config)
+    async def test_wrappers_delegate_to_embed(self, provider):
+        with (
+            patch.object(provider, "embed", wraps=provider.embed) as embed,
+            patch.object(provider.client.embeddings, "create", new_callable=AsyncMock) as create,
+        ):
+            create.side_effect = [sdk_response([1.0]), sdk_response([1.0], [2.0])]
+            await provider.embed_text("q")
+            await provider.embed_batch(["a", "b"])
 
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
-        mock_response.usage = MagicMock(prompt_tokens=10)
+        assert [c.args[0].input_type for c in embed.call_args_list] == ["query", "passage"]
 
-        with patch.object(
-            provider.client.embeddings, "create", new_callable=AsyncMock
-        ) as mock_create:
-            mock_create.return_value = mock_response
 
-            request = EmbeddingRequest(text="hello", model="text-embedding-3-large")
-            response = await provider.embed_text(request)
-
-            assert response.model == "text-embedding-3-large"
-            mock_create.assert_called_once()
-            call_args = mock_create.call_args
-            assert call_args[1]["model"] == "text-embedding-3-large"
+def test_sum_usage() -> None:
+    assert sum_usage([3, 4]) == EmbeddingUsage(input_tokens=7)
+    assert sum_usage([3, None]) is None
+    assert sum_usage([]) is None

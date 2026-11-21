@@ -125,6 +125,39 @@ class VectorStore(Protocol):
         """
         ...
 
+    async def verify_collection(self, collection: str) -> bool:
+        """Check ``collection`` was built for this store's embedding model/dimension/metric.
+
+        Returns:
+            False if the collection does not exist, True if it exists and matches
+
+        Raises:
+            RuntimeError: If it does not match (vectors would not be comparable) or
+                cannot be inspected
+        """
+        ...
+
+    async def delete_stale_chunks(
+        self, collection: str, document_id: str, keep_ids: list[str]
+    ) -> int:
+        """Delete a document's chunks that are not in ``keep_ids``.
+
+        Called after re-ingesting a document so chunks from an older, longer version
+        do not remain searchable (ADR-012).
+
+        Args:
+            collection: Collection name
+            document_id: Document whose chunks are cleaned up (payload ``document_id``)
+            keep_ids: Chunk IDs of the current version
+
+        Returns:
+            Number of stale chunks deleted (0 if the collection does not exist)
+
+        Raises:
+            RuntimeError: If deletion fails
+        """
+        ...
+
     async def update(
         self,
         collection: str,

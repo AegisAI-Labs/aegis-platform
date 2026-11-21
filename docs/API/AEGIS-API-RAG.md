@@ -87,15 +87,17 @@ No request body.
 ```json
 {
   "status": "healthy",
-  "embedding_provider": "OpenAIEmbedding",
-  "embedding_model": "unknown",
+  "embedding_provider": "NVIDIAEmbeddingProvider",
+  "embedding_model": "nvidia/nemotron-3-embed-1b",
   "vector_store": "QdrantVectorStore",
+  "collection": "documents",
   "latency_ms": 412.7
 }
 ```
 
-`embedding_provider` and `vector_store` are class names; `embedding_model` is currently always
-`"unknown"`. The check makes a real embedding call, so it consumes provider quota.
+`embedding_provider` and `vector_store` are class names; `embedding_model` is the configured
+model. The check makes a real embedding call (consuming provider quota) and returns `503` if
+either the embedding provider or the vector store is unreachable.
 
 ### `POST /rag/embed`
 
@@ -104,7 +106,7 @@ No request body.
 | `text` | string | 1–100,000 chars, not blank |
 
 ```json
-{ "embedding": [0.0123, -0.0456, "..."], "dimension": 1536, "latency_ms": 0 }
+{ "embedding": [0.0123, -0.0456, "..."], "dimension": 2048, "latency_ms": 0 }
 ```
 
 `latency_ms` is currently always `0` for this endpoint.
@@ -129,8 +131,22 @@ are treated as `internal` with no organization (visible to any non-guest in any 
 re-ingest them to restrict them.
 
 ```json
-{ "chunks_created": 12, "documents_stored": 2, "latency_ms": 1830.4 }
+{ "chunks_created": 12, "documents_stored": 2, "latency_ms": 1830.4, "chunks_removed": 0 }
 ```
+
+**Re-ingesting replaces a document.** Chunk IDs are `"<doc_id>#<position>"` and map to
+deterministic point IDs, so re-sending a `doc_id` overwrites its chunks instead of duplicating
+them. After the new chunks are stored, any chunk of that `doc_id` that is not part of the new
+version (for example the tail of a document that got shorter) is deleted; `chunks_removed`
+reports how many. If ingestion fails, nothing is deleted and the previous version stays
+searchable. The same text under two different `doc_id`s is stored twice.
+
+The collection (`RAG_COLLECTION`, default `documents`) is created on the first ingest and records
+the embedding model, vector size and distance metric it was built with. Vectors from different
+models are not comparable, so after switching `RAG_EMBEDDING_MODEL` every endpoint that uses the
+collection (including `/rag/health`) returns `503` with *"Collection 'documents' was built with …;
+the current configuration is …"* until you set `RAG_COLLECTION` to a new collection and re-ingest
+(or recreate the old one).
 
 ### `POST /rag/search`
 
@@ -189,7 +205,7 @@ passages only; answer generation happens in the agent layer.
 ```json
 {
   "collections": [
-    { "name": "documents", "vector_size": 1536, "count": 240, "distance": "cosine" }
+    { "name": "documents", "vector_size": 2048, "count": 240, "distance": "cosine" }
   ]
 }
 ```

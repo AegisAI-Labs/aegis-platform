@@ -220,23 +220,28 @@ chunker = create_chunker(config)
 chunks = chunker.chunk("Text to chunk...", "doc-id")
 ```
 
-## Embedding Provider (Abstract Protocol)
+## Embedding Provider (Protocol)
 
-The `EmbeddingProvider` protocol defines the interface for text embedding services.
+`EmbeddingProvider` (`rag/embeddings/base.py`) is implemented by `OpenAIEmbedding` and
+`NVIDIAEmbeddingProvider`. `embed()` is the primary call (ADR-013); `embed_text` / `embed_batch`
+are convenience wrappers that return bare vectors.
 
 ```python
-from aegis_platform.rag import EmbeddingProvider, EmbeddingRequest, EmbeddingResponse
+from aegis_platform.rag import EmbeddingRequest
 
+response = await provider.embed(
+    EmbeddingRequest(texts=["How often do keys rotate?"], input_type="query")
+)
+response.embeddings  # list[np.ndarray], aligned with texts
+response.model  # model that served the call
+response.usage  # EmbeddingUsage(input_tokens=...) or None if not reported
 
-class CustomEmbedder(EmbeddingProvider):
-    def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
-        """Convert text to embeddings."""
-        # Implementation: call embedding API, return vectors
-        pass
+vector = await provider.embed_text("a query")  # input_type="query"
+vectors = await provider.embed_batch(["doc 1", "doc 2"])  # input_type="passage"
 ```
 
-**Status:** Abstract protocol only (no concrete implementations yet)
-**Planned implementations:** OpenAI, Claude, Llama, Local models
+Use `input_type="query"` for search text and `"passage"` for stored documents; asymmetric models
+(e.g. NVIDIA Nemotron embed) require it, symmetric models ignore it.
 
 ## Vector Store (Abstract Protocol)
 

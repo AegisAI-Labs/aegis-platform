@@ -12,11 +12,28 @@ The embedding dimension is fixed at 1536 for text-embedding-3-small model.
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
 
+import numpy as np
 from openai import APIConnectionError, AsyncOpenAI, RateLimitError
 
-from aegis_platform.rag.models import EmbeddingRequest, EmbeddingResponse
+from aegis_platform.rag.embeddings.usage import sum_usage
+from aegis_platform.rag.models import (
+    PASSAGE,
+    QUERY,
+    EmbeddingRequest,
+    EmbeddingResponse,
+)
+
+PROVIDER_NAME = "openai"
+
+
+@dataclass(frozen=True)
+class _Batch:
+    """Result of one embeddings API call."""
+
+    vectors: list[np.ndarray]
+    input_tokens: int | None
+    model: str | None
 
 
 @dataclass
@@ -62,11 +79,13 @@ class OpenAIEmbeddingConfig:
 class OpenAIEmbedding:
     """OpenAI EmbeddingProvider implementation.
 
-    Wraps OpenAI's embedding API with:
+    Conforms to ``EmbeddingProvider`` (``embed_text(str) -> np.ndarray``,
+    ``embed_batch(list[str]) -> list[np.ndarray]``), which is what ``RAGService`` calls.
+
     - Async/await for non-blocking operations
-    - Configurable batching respecting API limits
-    - Automatic retries with exponential backoff
-    - Rate limit error handling
+    - Inputs larger than ``batch_size`` are split into several API calls
+    - Output order and length always match the input (empty texts are rejected, never dropped)
+    - Bounded retries for rate-limit and connection errors (the SDK's own retries are disabled)
     """
 
     def __init__(self, config: OpenAIEmbeddingConfig) -> None:
@@ -80,151 +99,145 @@ class OpenAIEmbedding:
         """
         config.validate()
         self.config = config
-        self.client = AsyncOpenAI(api_key=config.api_key)
-
-    async def embed_text(self, request: EmbeddingRequest) -> EmbeddingResponse:
-        """Embed a single text string.
-
-        Args:
-            request: Embedding request with text and optional model override
-
-        Returns:
-            EmbeddingResponse with embedding vector and metadata
-
-        Raises:
-            ValueError: If text is empty or malformed
-            RuntimeError: If embedding fails after retries
-        """
-        if not request.text or not request.text.strip():
-            raise ValueError("Cannot embed empty text")
-
-        text = request.text.strip()
-        model = request.model or self.config.model
-
-        response = await self._embed_with_retry([text], model)
-
-        if not response:
-            raise RuntimeError("Failed to generate embedding")
-
-        embedding_data = response[0]
-
-        return EmbeddingResponse(
-            text=text,
-            embedding=embedding_data["embedding"],
-            model=model,
-            dimension=len(embedding_data["embedding"]),
-            tokens_used=embedding_data.get("tokens_used", 0),
+        self.client = AsyncOpenAI(
+            api_key=config.api_key,
+            timeout=config.timeout,
+            # Retries are handled once, in _embed_with_retry.
+            max_retries=0,
         )
 
-    async def embed_batch(self, texts: list[str]) -> list[EmbeddingResponse]:
-        """Embed multiple texts efficiently.
+    @property
+    def model(self) -> str:
+        return self.config.model
 
-        Args:
-            texts: List of text strings to embed
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """Embed ``request.texts`` (split into API-sized batches), with summed token usage.
 
-        Returns:
-            List of EmbeddingResponse objects in same order as input
+        ``input_type`` is ignored: OpenAI embedding models are symmetric.
 
         Raises:
-            ValueError: If texts list is empty or exceeds batch limits
+            ValueError: If the request is empty or any text is empty
             RuntimeError: If embedding fails after retries
         """
+        texts = request.texts
         if not texts:
             raise ValueError("Cannot embed empty text list")
 
-        if len(texts) > self.config.batch_size:
-            raise ValueError(f"Batch size {len(texts)} exceeds limit {self.config.batch_size}")
+        empty = [index for index, text in enumerate(texts) if not text or not text.strip()]
+        if empty:
+            raise ValueError(f"Cannot embed empty texts at positions {empty[:10]}")
 
-        clean_texts = [text.strip() for text in texts if text and text.strip()]
-        if not clean_texts:
-            raise ValueError("All texts in batch are empty")
+        clean_texts = [text.strip() for text in texts]
+        embeddings: list[np.ndarray] = []
+        token_counts: list[int | None] = []
+        served_model = self.config.model
 
-        embeddings_data = await self._embed_with_retry(clean_texts, self.config.model)
-
-        return [
-            EmbeddingResponse(
-                text=clean_texts[i],
-                embedding=data["embedding"],
-                model=self.config.model,
-                dimension=len(data["embedding"]),
-                tokens_used=data.get("tokens_used", 0),
+        for start in range(0, len(clean_texts), self.config.batch_size):
+            batch = await self._embed_with_retry(
+                clean_texts[start : start + self.config.batch_size], self.config.model
             )
-            for i, data in enumerate(embeddings_data)
-        ]
+            embeddings.extend(batch.vectors)
+            token_counts.append(batch.input_tokens)
+            served_model = batch.model or served_model
+
+        return EmbeddingResponse(
+            embeddings=embeddings,
+            model=served_model,
+            provider=PROVIDER_NAME,
+            dimension=len(embeddings[0]),
+            usage=sum_usage(token_counts),
+        )
+
+    async def embed_text(self, text: str) -> np.ndarray:
+        """Embed a single query text.
+
+        Raises:
+            ValueError: If text is empty or whitespace
+            RuntimeError: If embedding fails after retries
+        """
+        if not text or not text.strip():
+            raise ValueError("Cannot embed empty text")
+
+        response = await self.embed(EmbeddingRequest(texts=[text], input_type=QUERY))
+        return response.embeddings[0]
+
+    async def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        """Embed many passages; result ``i`` is the embedding of ``texts[i]``.
+
+        Raises:
+            ValueError: If the list is empty or any text is empty
+            RuntimeError: If embedding fails after retries
+        """
+        response = await self.embed(EmbeddingRequest(texts=texts, input_type=PASSAGE))
+        return response.embeddings
 
     async def get_dimension(self) -> int:
-        """Get embedding vector dimension for this provider.
-
-        Returns:
-            Number of dimensions in embedding vectors (always 1536)
-
-        Note:
-            text-embedding-3-small model produces fixed 1536-dimensional vectors
-        """
+        """Embedding dimension (1536 for text-embedding-3-small)."""
         return self.config.dimension
 
     async def health_check(self) -> bool:
-        """Check if provider is available and responding.
-
-        Returns:
-            True if provider is healthy, False otherwise
-
-        Note:
-            Performs a simple embedding call to verify API connectivity
-        """
+        """Check if provider is available and responding."""
         try:
-            response = await self._embed_with_retry(["health"], self.config.model)
-            return bool(response)
+            batch = await self._embed_with_retry(["health"], self.config.model)
+            return bool(batch.vectors)
         except Exception:  # noqa: BLE001
             return False
 
-    async def _embed_with_retry(self, texts: list[str], model: str) -> list[dict[str, Any]]:
-        """Internal method to embed texts with retry logic.
-
-        Args:
-            texts: List of texts to embed
-            model: Model to use for embedding
-
-        Returns:
-            List of embedding data dictionaries
+    async def _embed_with_retry(self, texts: list[str], model: str) -> _Batch:
+        """Embed one API batch with bounded retries.
 
         Raises:
-            RuntimeError: If all retries exhausted
+            RuntimeError: If the request fails or all retries are exhausted. The message
+                contains the error type only, never provider response text.
         """
+        attempts = max(self.config.max_retries, 1)
         last_error: Exception | None = None
 
-        for attempt in range(self.config.max_retries):
+        for attempt in range(attempts):
             try:
                 response = await self.client.embeddings.create(
                     input=texts,
                     model=model,
                 )
-
-                return [
-                    {
-                        "embedding": item.embedding,
-                        "tokens_used": (
-                            response.usage.prompt_tokens if response.usage is not None else 0
-                        ),
-                    }
-                    for item in response.data
-                ]
-
             except RateLimitError as e:
+                if _is_quota_exhausted(e):
+                    # Billing/quota errors never succeed on retry.
+                    raise RuntimeError("Embedding quota exhausted (insufficient_quota)") from e
                 last_error = e
-                if attempt < self.config.max_retries - 1:
-                    wait_time = 2**attempt
-                    await asyncio.sleep(wait_time)
+                if attempt < attempts - 1:
+                    await asyncio.sleep(2**attempt)
                 continue
-
             except APIConnectionError as e:
                 last_error = e
-                if attempt < self.config.max_retries - 1:
-                    wait_time = 2**attempt
-                    await asyncio.sleep(wait_time)
+                if attempt < attempts - 1:
+                    await asyncio.sleep(2**attempt)
                 continue
-
             except Exception as e:
-                raise RuntimeError(f"Embedding failed: {e!s}") from e
+                raise RuntimeError(f"Embedding failed ({type(e).__name__})") from e
 
-        raise RuntimeError(f"Failed to embed after {self.config.max_retries} retries: {last_error}")
+            # The API may return items out of order; sort by index to keep alignment.
+            items = sorted(response.data, key=lambda item: item.index)
+            if len(items) != len(texts):
+                raise RuntimeError(
+                    f"Embedding API returned {len(items)} vectors for {len(texts)} inputs"
+                )
+            usage = getattr(response, "usage", None)
+            tokens = getattr(usage, "prompt_tokens", None)
+            served_model = getattr(response, "model", None)
+            return _Batch(
+                vectors=[np.asarray(item.embedding, dtype=np.float32) for item in items],
+                input_tokens=tokens if isinstance(tokens, int) else None,
+                model=served_model if isinstance(served_model, str) and served_model else None,
+            )
+
+        raise RuntimeError(
+            f"Failed to embed after {attempts} attempts ({type(last_error).__name__})"
+        ) from last_error
+
+
+def _is_quota_exhausted(error: RateLimitError) -> bool:
+    body = error.body if isinstance(error.body, dict) else {}
+    raw_nested = body.get("error")
+    nested = raw_nested if isinstance(raw_nested, dict) else {}
+    values = {body.get("type"), body.get("code"), nested.get("type"), nested.get("code")}
+    return bool(values & {"insufficient_quota", "credit_balance_exhausted"})

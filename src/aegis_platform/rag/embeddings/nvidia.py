@@ -24,6 +24,14 @@ import httpx
 import numpy as np
 
 from aegis_platform.rag.embeddings.base import EmbeddingProvider
+from aegis_platform.rag.embeddings.usage import sum_usage
+from aegis_platform.rag.models import (
+    PASSAGE,
+    QUERY,
+    EmbeddingRequest,
+    EmbeddingResponse,
+    InputType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +48,9 @@ class NVIDIAEmbeddingConfig:
         timeout: Request timeout in seconds (default: 30)
         max_retries: Maximum retry attempts (default: 3)
         api_endpoint: NIM API base URL (default: NVIDIA official)
+        send_input_type: Send ``input_type`` ("query" for searches, "passage" for ingested
+            documents). Required by asymmetric retrieval models such as Nemotron embed;
+            set False for symmetric models that reject the parameter.
     """
 
     api_key: str
@@ -49,6 +60,7 @@ class NVIDIAEmbeddingConfig:
     timeout: int = 30
     max_retries: int = 3
     api_endpoint: str = "https://integrate.api.nvidia.com/v1"
+    send_input_type: bool = True
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -84,6 +96,7 @@ class NVIDIAEmbeddingConfig:
             RAG_EMBEDDING_TIMEOUT: Timeout seconds (optional)
             RAG_EMBEDDING_MAX_RETRIES: Max retries (optional)
             RAG_EMBEDDING_API_ENDPOINT: API endpoint (optional)
+            RAG_EMBEDDING_SEND_INPUT_TYPE: "true" (default) or "false"
 
         Returns:
             Configured NVIDIAEmbeddingConfig instance
@@ -105,6 +118,14 @@ class NVIDIAEmbeddingConfig:
             "https://integrate.api.nvidia.com/v1",
         )
 
+        send_input_type = os.getenv(
+            "RAG_EMBEDDING_SEND_INPUT_TYPE", "true"
+        ).strip().lower() not in (
+            "0",
+            "false",
+            "no",
+        )
+
         return cls(
             api_key=api_key,
             model=model,
@@ -113,7 +134,24 @@ class NVIDIAEmbeddingConfig:
             timeout=timeout,
             max_retries=max_retries,
             api_endpoint=api_endpoint,
+            send_input_type=send_input_type,
         )
+
+
+PROVIDER_NAME = "nvidia"
+
+
+@dataclass(frozen=True)
+class _Batch:
+    """Result of one embeddings API call."""
+
+    vectors: list[list[float]]
+    input_tokens: int | None
+    model: str | None
+
+
+# Client errors that can never succeed on retry.
+_NON_RETRYABLE_STATUS = frozenset({400, 401, 403, 404, 405, 413, 422})
 
 
 class NVIDIAEmbeddingProvider(EmbeddingProvider):
@@ -168,11 +206,16 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
 
         return self.client
 
-    async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+    @property
+    def model(self) -> str:
+        return self.config.model
+
+    async def _embed_batch(self, texts: list[str], input_type: InputType = PASSAGE) -> _Batch:
         """Call NVIDIA NIM API to embed a batch of texts.
 
         Args:
             texts: List of texts to embed (max batch_size)
+            input_type: "query" for search queries, "passage" for stored documents
 
         Returns:
             List of embedding vectors
@@ -182,12 +225,14 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
             ValueError: If response format is invalid
         """
         if not texts:
-            return []
+            return _Batch(vectors=[], input_tokens=0, model=None)
 
-        payload = {
+        payload: dict[str, object] = {
             "input": texts,
             "model": self.config.model,
         }
+        if self.config.send_input_type:
+            payload["input_type"] = input_type
 
         client = await self._get_client()
         url = f"{self.config.api_endpoint}/embeddings"
@@ -200,6 +245,12 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
 
                 if response.status_code == 401:
                     raise ValueError("Invalid NVIDIA API key (401 Unauthorized)")
+
+                if response.status_code in _NON_RETRYABLE_STATUS:
+                    # Fail fast; do not include the response body (may echo inputs).
+                    raise RuntimeError(
+                        f"NVIDIA embedding request rejected (HTTP {response.status_code})"
+                    )
 
                 if response.status_code == 429:
                     wait_time = 2**attempt
@@ -239,7 +290,14 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
                     f"Successfully embedded {len(texts)} texts ({len(embeddings[0])} dimensions)"
                 )
 
-                return embeddings
+                usage = data.get("usage")
+                tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
+                served_model = data.get("model")
+                return _Batch(
+                    vectors=embeddings,
+                    input_tokens=tokens if isinstance(tokens, int) else None,
+                    model=served_model if isinstance(served_model, str) and served_model else None,
+                )
 
             except (httpx.RequestError, httpx.HTTPStatusError) as e:
                 last_error = e
@@ -247,7 +305,7 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
                 if attempt < self.config.max_retries:
                     wait_time = 2**attempt
                     logger.warning(
-                        f"Embedding request failed: {e}. "
+                        f"Embedding request failed ({_describe(e)}). "
                         f"Retrying in {wait_time}s "
                         f"(attempt {attempt + 1}/{self.config.max_retries + 1})"
                     )
@@ -258,17 +316,54 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
                     )
 
         raise RuntimeError(
-            f"Failed to embed texts after {self.config.max_retries + 1} attempts: {last_error}"
+            f"Failed to embed texts after {self.config.max_retries + 1} attempts"
+            + (f" ({_describe(last_error)})" if last_error else "")
         ) from last_error
 
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """Embed ``request.texts`` with the request's ``input_type``, batching as needed.
+
+        Raises:
+            ValueError: If the request is empty, a text is empty, or the response is malformed
+            RuntimeError: If the API request fails
+        """
+        texts = request.texts
+        if not texts:
+            raise ValueError("Cannot embed empty text list")
+
+        if not all(isinstance(t, str) for t in texts):
+            raise ValueError("All inputs must be strings")
+
+        empty = [index for index, text in enumerate(texts) if not text.strip()]
+        if empty:
+            raise ValueError(f"Cannot embed empty texts at positions {empty[:10]}")
+
+        logger.info(f"Embedding {len(texts)} texts (batch_size={self.config.batch_size})")
+
+        embeddings: list[np.ndarray] = []
+        token_counts: list[int | None] = []
+        served_model = self.config.model
+
+        for i in range(0, len(texts), self.config.batch_size):
+            batch = await self._embed_batch(
+                texts[i : i + self.config.batch_size], input_type=request.input_type
+            )
+            embeddings.extend(np.array(emb, dtype=np.float32) for emb in batch.vectors)
+            token_counts.append(batch.input_tokens)
+            served_model = batch.model or served_model
+
+        logger.info(f"Successfully embedded {len(embeddings)} texts")
+
+        return EmbeddingResponse(
+            embeddings=embeddings,
+            model=served_model,
+            provider=PROVIDER_NAME,
+            dimension=len(embeddings[0]),
+            usage=sum_usage(token_counts),
+        )
+
     async def embed_text(self, text: str) -> np.ndarray:
-        """Embed a single text string.
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Embedding vector as 1D numpy array
+        """Embed a single query text (``input_type="query"``).
 
         Raises:
             ValueError: If text is empty
@@ -276,43 +371,18 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
         """
         if not text or not text.strip():
             raise ValueError("Cannot embed empty text")
-        embeddings = await self.embed_batch([text])
-        return embeddings[0]
+        response = await self.embed(EmbeddingRequest(texts=[text], input_type=QUERY))
+        return response.embeddings[0]
 
     async def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
-        """Embed a list of texts using NVIDIA NIM API.
+        """Embed passages for storage (``input_type="passage"``).
 
-        Automatically batches requests if texts exceed batch_size.
-        Uses exponential backoff for rate limiting and transient errors.
-
-        Args:
-            texts: List of texts to embed
-
-        Returns:
-            List of embedding vectors (each is a 1D numpy array)
-
-        Raises:
-            ValueError: If input is invalid or response format is wrong
-            RuntimeError: If embedding fails after retries
+        Returns an empty list for empty input (existing behavior).
         """
         if not texts:
             return []
-
-        if not all(isinstance(t, str) for t in texts):
-            raise ValueError("All inputs must be strings")
-
-        logger.info(f"Embedding {len(texts)} texts (batch_size={self.config.batch_size})")
-
-        all_embeddings: list[np.ndarray] = []
-
-        for i in range(0, len(texts), self.config.batch_size):
-            batch = texts[i : i + self.config.batch_size]
-            batch_embeddings = await self._embed_batch(batch)
-            all_embeddings.extend([np.array(emb, dtype=np.float32) for emb in batch_embeddings])
-
-        logger.info(f"Successfully embedded {len(all_embeddings)} texts")
-
-        return all_embeddings
+        response = await self.embed(EmbeddingRequest(texts=texts, input_type=PASSAGE))
+        return response.embeddings
 
     async def get_dimension(self) -> int:
         """Get embedding vector dimension.
@@ -332,8 +402,8 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
             True if provider is healthy, False otherwise
         """
         try:
-            embeddings = await self._embed_batch(["health check"])
-            if not embeddings or len(embeddings[0]) != self.config.embedding_dimension:
+            batch = await self._embed_batch(["health check"], input_type=QUERY)
+            if not batch.vectors or len(batch.vectors[0]) != self.config.embedding_dimension:
                 logger.warning("Health check failed: invalid embedding dimension")
                 return False
             logger.debug("NVIDIA NIM API health check passed")
@@ -361,3 +431,10 @@ class NVIDIAEmbeddingProvider(EmbeddingProvider):
     ) -> None:
         """Async context manager exit."""
         await self.close()
+
+
+def _describe(error: Exception) -> str:
+    """Error summary without URLs or response bodies."""
+    if isinstance(error, httpx.HTTPStatusError):
+        return f"HTTP {error.response.status_code}"
+    return type(error).__name__

@@ -8,17 +8,29 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
+from aegis_platform.rag.models import EmbeddingRequest, EmbeddingResponse
+
 
 @runtime_checkable
 class EmbeddingProvider(Protocol):
     """Abstract protocol for text embedding providers.
 
     Implementations must support:
-    - Single text embedding
-    - Batch embedding for efficiency
+    - ``embed``: the primary call, returning vectors with model and token usage (ADR-013)
+    - ``embed_text`` / ``embed_batch``: convenience wrappers returning bare vectors
+      (queries and passages respectively)
     - Dimension information
     - Health checks for operational monitoring
     """
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """Embed ``request.texts``; vectors are aligned with the input order.
+
+        Raises:
+            ValueError: If the request is empty or contains empty texts
+            RuntimeError: If embedding fails
+        """
+        ...
 
     async def embed_text(self, text: str) -> np.ndarray:
         """Embed a single text string.

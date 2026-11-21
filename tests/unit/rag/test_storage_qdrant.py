@@ -87,21 +87,6 @@ class TestQdrantCollectionManagement:
     """Test collection lifecycle management."""
 
     @pytest.mark.asyncio
-    async def test_create_collection_success(self):
-        """Test successful collection creation."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-        store = QdrantVectorStore(config)
-
-        with patch.object(
-            store.client, "recreate_collection", new_callable=AsyncMock
-        ) as mock_create:
-            await store.create_collection("documents", 1536, "cosine")
-
-            mock_create.assert_called_once()
-            call_args = mock_create.call_args
-            assert call_args[1]["collection_name"] == "documents"
-
-    @pytest.mark.asyncio
     async def test_delete_collection_success(self):
         """Test successful collection deletion."""
         config = QdrantVectorStoreConfig(url="http://localhost:6333")
@@ -171,51 +156,6 @@ class TestQdrantVectorInsertion:
     """Test vector insertion and storage."""
 
     @pytest.mark.asyncio
-    async def test_insert_single_vector_success(self):
-        """Test successful single vector insertion."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-        store = QdrantVectorStore(config)
-
-        mock_response = MagicMock()
-        with patch.object(store.client, "upsert", new_callable=AsyncMock) as mock_upsert:
-            mock_upsert.return_value = mock_response
-
-            vector = [0.1] * 1536
-            ids = await store.insert(
-                collection="documents",
-                vectors=[vector],
-                metadata=[{"source": "doc1"}],
-                ids=["vec_1"],
-            )
-
-            assert ids == ["vec_1"]
-            mock_upsert.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_insert_batch_vectors_success(self):
-        """Test successful batch vector insertion."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-        store = QdrantVectorStore(config)
-
-        mock_response = MagicMock()
-        with patch.object(store.client, "upsert", new_callable=AsyncMock) as mock_upsert:
-            mock_upsert.return_value = mock_response
-
-            vectors = [[0.1] * 1536, [0.2] * 1536, [0.3] * 1536]
-            metadata = [{"id": i} for i in range(3)]
-            ids = ["vec_1", "vec_2", "vec_3"]
-
-            result_ids = await store.insert(
-                collection="documents",
-                vectors=vectors,
-                metadata=metadata,
-                ids=ids,
-            )
-
-            assert len(result_ids) == 3
-            mock_upsert.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_insert_empty_vectors_raises(self):
         """Test inserting empty vector list raises error."""
         config = QdrantVectorStoreConfig(url="http://localhost:6333")
@@ -256,94 +196,6 @@ class TestQdrantVectorInsertion:
 
 class TestQdrantVectorSearch:
     """Test similarity search functionality."""
-
-    @pytest.mark.asyncio
-    async def test_search_success(self):
-        """Test successful similarity search."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-        store = QdrantVectorStore(config)
-
-        query_vector = [0.1] * 1536
-        mock_response = [
-            MagicMock(
-                id="vec_1",
-                score=0.95,
-                payload={"text": "result 1", "document_id": "doc_1", "chunk_id": "chunk_1"},
-            ),
-            MagicMock(
-                id="vec_2",
-                score=0.87,
-                payload={"text": "result 2", "document_id": "doc_2", "chunk_id": "chunk_2"},
-            ),
-        ]
-
-        # Mock at module level since AsyncQdrantClient.search is not directly accessible
-        with patch("aegis_platform.rag.storage.qdrant.AsyncQdrantClient") as MockClient:
-            mock_instance = MagicMock()
-            mock_instance.search = AsyncMock(return_value=mock_response)
-            MockClient.return_value = mock_instance
-
-            # Recreate store with mocked client
-            store = QdrantVectorStore(config)
-
-            results = await store.search(collection="documents", vector=query_vector, limit=10)
-
-            assert len(results) == 2
-            assert results[0].text == "result 1"
-            assert results[0].score == 0.95
-            assert results[0].metadata == {
-                "text": "result 1",
-                "document_id": "doc_1",
-                "chunk_id": "chunk_1",
-            }
-
-    @pytest.mark.asyncio
-    async def test_search_with_score_threshold(self):
-        """Test search with score threshold filtering."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-
-        query_vector = [0.1] * 1536
-        mock_response = [
-            MagicMock(id="vec_1", score=0.95, payload={"text": "result 1"}),
-        ]
-
-        with patch("aegis_platform.rag.storage.qdrant.AsyncQdrantClient") as MockClient:
-            mock_instance = MagicMock()
-            mock_instance.search = AsyncMock(return_value=mock_response)
-            MockClient.return_value = mock_instance
-
-            store = QdrantVectorStore(config)
-
-            results = await store.search(
-                collection="documents",
-                vector=query_vector,
-                limit=10,
-                score_threshold=0.9,
-            )
-
-            assert len(results) == 1
-            mock_instance.search.assert_called_once()
-            call_kwargs = mock_instance.search.call_args[1]
-            assert call_kwargs["score_threshold"] == 0.9
-
-    @pytest.mark.asyncio
-    async def test_search_empty_results(self):
-        """Test search returns empty list when no results."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-
-        query_vector = [0.1] * 1536
-        mock_response = []
-
-        with patch("aegis_platform.rag.storage.qdrant.AsyncQdrantClient") as MockClient:
-            mock_instance = MagicMock()
-            mock_instance.search = AsyncMock(return_value=mock_response)
-            MockClient.return_value = mock_instance
-
-            store = QdrantVectorStore(config)
-
-            results = await store.search(collection="documents", vector=query_vector, limit=10)
-
-            assert len(results) == 0
 
     @pytest.mark.asyncio
     async def test_search_invalid_vector_dimension_raises(self):
@@ -481,28 +333,6 @@ class TestQdrantHealthCheck:
 
 class TestQdrantEdgeCases:
     """Test edge cases and special scenarios."""
-
-    @pytest.mark.asyncio
-    async def test_insert_with_large_metadata(self):
-        """Test inserting vectors with large metadata."""
-        config = QdrantVectorStoreConfig(url="http://localhost:6333")
-        store = QdrantVectorStore(config)
-
-        large_metadata = {
-            "text": "word " * 10000,
-            "source": "document",
-            "tags": [f"tag_{i}" for i in range(100)],
-        }
-
-        with patch.object(store.client, "upsert", new_callable=AsyncMock) as mock_upsert:
-            await store.insert(
-                collection="documents",
-                vectors=[[0.1] * 1536],
-                metadata=[large_metadata],
-                ids=["vec_1"],
-            )
-
-            mock_upsert.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_with_limit_zero_raises(self):

@@ -36,6 +36,7 @@ from aegis_platform.rag.models import (
     Document,
     EmbeddingRequest,
     EmbeddingResponse,
+    EmbeddingUsage,
     SearchResult,
 )
 from aegis_platform.rag.provider_factory import (
@@ -59,6 +60,7 @@ __all__ = [
     "EmbeddingProvider",
     "EmbeddingRequest",
     "EmbeddingResponse",
+    "EmbeddingUsage",
     "NVIDIAEmbeddingConfig",
     "NVIDIAEmbeddingProvider",
     "OpenAIEmbedding",
