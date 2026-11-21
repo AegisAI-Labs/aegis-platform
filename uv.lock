@@ -15,6 +15,7 @@ source = { editable = "." }
 dependencies = [
     { name = "en-core-web-lg" },
     { name = "fastapi" },
+    { name = "langchain-core" },
     { name = "langchain-text-splitters" },
     { name = "langgraph" },
     { name = "openai" },
@@ -42,6 +43,7 @@ dev = [
 requires-dist = [
     { name = "en-core-web-lg", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.141.1" },
+    { name = "langchain-core", specifier = ">=1.8.1" },
     { name = "langchain-text-splitters", specifier = ">=0.1.0" },
     { name = "langgraph", specifier = ">=1.2.12" },
     { name = "openai", specifier = ">=3.24.0" },

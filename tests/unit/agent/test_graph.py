@@ -2,6 +2,7 @@ import pytest
 
 from aegis_platform.agent.graph import calculator_node, route_request, tool_registry
 from aegis_platform.agent.state import AgentState
+from aegis_platform.tools.errors import ToolExecutionError
 
 
 @pytest.mark.parametrize(
@@ -11,6 +12,10 @@ from aegis_platform.agent.state import AgentState
         ("Please MULTIPLY 2 by 3", "calculator"),
         ("Hello", "llm"),
         ("calc:2+3", "llm"),
+        ("add 2 and 3", "calculator"),
+        ("What is my home address?", "llm"),
+        ("add padding to the div", "llm"),
+        ("calculate the area of a circle", "llm"),
     ],
 )
 def test_route_request(message: str, expected: str) -> None:
@@ -44,5 +49,10 @@ def test_calculator_node_uses_registered_tool(monkeypatch: pytest.MonkeyPatch) -
 
 def test_calculator_node_rejects_invalid_expression() -> None:
     state: AgentState = {"user_input": "calculate invalid", "response": "", "tool_used": ""}
-    with pytest.raises(ValueError, match="Invalid calculator expression"):
+    with pytest.raises(ToolExecutionError, match="Invalid calculator expression"):
         calculator_node(state)
+
+
+def test_calculator_node_handles_phrases() -> None:
+    state: AgentState = {"user_input": "subtract 2 from 5", "response": "", "tool_used": ""}
+    assert calculator_node(state) == {"response": "3", "tool_used": "calculator"}

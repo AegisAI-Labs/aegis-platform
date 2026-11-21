@@ -1,4 +1,4 @@
-# ADR-003: LLM Streaming and Error Boundaries
+# ADR-005: LLM Streaming and Error Boundaries
 
 - Status: Accepted
 - Date: 2026-10-11

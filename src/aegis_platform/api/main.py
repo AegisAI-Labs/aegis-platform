@@ -1,16 +1,16 @@
 import json
+import logging
 
 from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
 from aegis_platform.agent.service import AgentService
+from aegis_platform.api.errors import classify_error, register_exception_handlers
 from aegis_platform.api.models import AgentRequest, AgentResponse
 from aegis_platform.api.rag import router as rag_router
 from aegis_platform.config.settings import settings
 from aegis_platform.llm.errors import (
-    ProviderAuthenticationError,
-    ProviderQuotaExhausted,
     ProviderRateLimited,
     ProviderTimeout,
     ProviderUnavailable,
@@ -27,7 +27,12 @@ from aegis_platform.observability.retry_telemetry import (
     RetryTelemetry,
 )
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Aegis AI Platform")
+
+# Map tool and provider failures to structured HTTP errors (ADR-011).
+register_exception_handlers(app)
 
 # Bind an X-Correlation-ID to every request (accepted from the caller or generated).
 app.add_middleware(CorrelationIdMiddleware)
@@ -123,7 +128,7 @@ def get_events():
 
 
 @app.post("/agent/run", response_model=AgentResponse, tags=["Agent"])
-async def run_agent(request: AgentRequest):
+async def run_agent(request: AgentRequest) -> AgentResponse:
     result = await agent_service.run(request.message)
     return AgentResponse(**result)
 
@@ -133,35 +138,33 @@ def sse_event(event: str, data: dict[str, str]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-@app.post("/agent/stream")
-async def stream_agent(request: AgentRequest):
-    # Return a streaming response using Server-Sent Events (SSE)
-    # Handles the incoming HTTP request and returns a streaming HTTP response.
-    async def generate():
-        # Generate response chunks incrementally
-        # Produces response chunks incrementally for FastAPI to send to the client.
+@app.post("/agent/stream", tags=["Agent"])
+async def stream_agent(request: AgentRequest) -> StreamingResponse:
+    """Stream the agent response as Server-Sent Events (ADR-011).
+
+    Events: ``token`` {"text"}, ``done`` {"status": "completed"}, ``error`` {"message", "code"}.
+    A client disconnect cancels the graph and the provider stream; no error event is sent.
+    """
+
+    async def generate():  # type: ignore[no-untyped-def]
         try:
             async for chunk in agent_service.stream(request.message):
                 yield sse_event("token", {"text": chunk})
 
             yield sse_event("done", {"status": "completed"})
 
-        except ProviderQuotaExhausted:
-            yield sse_event(
-                "error",
-                {"message": "Provider quota exhausted. Please add credits or switch providers."},
-            )
-        except (
-            ProviderAuthenticationError,
-            ProviderRateLimited,
-            ProviderTimeout,
-            ProviderUnavailable,
-        ):
-            # Do not expose raw provider exception details.
-            yield sse_event(
-                "error",
-                {"message": "The AI provider could not complete the request."},
-            )
+        except Exception as exc:
+            # Headers are already sent, so failures are reported in-band.
+            # Never expose raw provider exception details.
+            info = classify_error(exc)
+            if info.code == "internal_error":
+                logger.exception("agent_stream_failed")
+            else:
+                logger.warning(
+                    "agent_stream_failed",
+                    extra={"code": info.code, "error_type": type(exc).__name__},
+                )
+            yield sse_event("error", {"message": info.message, "code": info.code})
 
     return StreamingResponse(
         generate(),
@@ -173,10 +176,5 @@ async def stream_agent(request: AgentRequest):
     )
 
 
-# @app.post("/agent/stream", tags=["Agent"])
-# async def stream_agent(request: AgentRequest):
-#     return StreamingResponse(agent_service.stream(request.message), media_type="text/plain")
-
-
-# To run the FastAPI server in development mode:
-# uvicorn services.api.main:app --reload
+# To run the FastAPI server in development mode (from the repository root):
+# PYTHONPATH=src uvicorn aegis_platform.api.main:app --reload

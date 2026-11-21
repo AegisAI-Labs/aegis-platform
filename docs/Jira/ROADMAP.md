@@ -1,7 +1,7 @@
 # AEGIS Roadmap
 
 Version: 2.0
-Last Updated: 2026-11-20 (Day 14 — LLM observability closed)
+Last Updated: 2026-11-20 (Day 15 — agent hardening)
 
 The original 16-week roadmap is the source of truth. Work added outside it is tracked
 under **Extensions** and does not replace any milestone.
@@ -15,9 +15,9 @@ Status values are based on source code and test evidence, not on design document
 
 | Week | Milestone | Status | Evidence / known gaps |
 |------|-----------|--------|-----------------------|
-| 1 | FastAPI Foundation | Done | `api/main.py`, health/ready/live, CI, pre-commit, tag `v0.1.0`. Gaps: no app factory, no exception handlers. |
+| 1 | FastAPI Foundation | Done | `api/main.py`, health/ready/live, CI, pre-commit, tag `v0.1.0`. Exception handlers added Day 15. Gap: no app factory (Day 18). |
 | 2 | OpenAI / LLM Integration | Done | `llm/` protocol, models, errors, factory, OpenAI provider; unit tests. |
-| 3 | LangGraph Agent Architecture | Done (defects) | `agent/graph.py` route → calculator / llm. Gaps: calculator uses `eval`; keyword routing matches "address" as "add"; `/agent/stream` replays a finished answer instead of streaming. |
+| 3 | LangGraph Agent Architecture | Done | `agent/graph.py` route → calculator / llm. Day 15 (ADR-011): real streaming through the graph, AST-safe calculator, whole-word routing with expression extraction, structured HTTP/SSE error mapping. |
 | 4 | RAG | Partial | Chunking, OpenAI/NVIDIA embeddings, Qdrant store, `/rag/*` endpoints, safety layers. Gaps: OpenAI embedder does not match the `EmbeddingProvider` interface; Qdrant `search` call not available in qdrant-client 1.20; unstable point IDs; collection never created; no grounded answer generation; not integrated into the agent. |
 | 5 | PostgreSQL | Not started | Persistence for conversations, execution history and the RAG document registry. |
 | 6 | Kafka | Not started | Event-driven processing (producers/consumers) behind the `EventSink` contract. |
@@ -54,7 +54,7 @@ No new milestone (W5 PostgreSQL, W6 Kafka) starts until these days are committed
 |-----|-------|--------|
 | 13 | Baseline hygiene + roadmap status reconciliation | Done |
 | 14 | Close LLM observability milestone | Done |
-| 15 | Agent hardening (real streaming, error mapping, safe calculator, routing) | Planned |
+| 15 | Agent hardening (real streaming, error mapping, safe calculator, routing) | Done |
 | 16 | RAG real path (embedder interface, Qdrant query/IDs/collection, tests) | Planned |
 | 17 | RAG grounded answers + agent integration (RFC-009 Phase 3) | Planned |
 | 18 | Security and runtime hardening | Planned |

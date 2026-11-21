@@ -366,6 +366,39 @@ Supersedes the "Pending" items in the Day 8 table above.
 
 ---
 
+## Day 15 - Agent Hardening: Real Streaming, Error Mapping, Safe Calculator
+
+## Overview
+`/agent/stream` now streams provider output through the LangGraph workflow instead of replaying a finished
+answer. Tool and provider failures map to structured HTTP errors and SSE `error` events. The calculator no
+longer uses `eval`, and routing uses whole words.
+
+## Feature Traceability
+
+| Stage | Reference |
+|--------|-----------|
+| ADR | AEGIS-ADR-011 (new) — streaming through LangGraph custom stream mode, error mapping, calculator safety; AEGIS-ADR-005 heading fixed (was "ADR-003") |
+| Implementation | `agent/graph.py`, `agent/service.py`, `api/errors.py` (new), `api/main.py`, `tools/calculator.py`, `tools/expression.py` (new), `tools/errors.py` (new), `tools/registry.py`, `tools/__init__.py`, `llm/providers/__init__.py` |
+| Build | `pyproject.toml`: `langchain-core` declared directly (imported for `RunnableConfig`) |
+| Tests | `tests/unit/agent/test_service_streaming.py`, `tests/integration/test_api_errors.py`, `tests/unit/tools/test_calculator_safety.py`, `tests/unit/tools/test_expression.py`; updated stream/route tests |
+| Documentation | README streaming and error contract |
+
+## Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| Provider chunks forwarded unchanged; first chunk before generation ends | ✅ |
+| SSE event names and payloads unchanged (`code` added to `error`) | ✅ |
+| Every failure ends the stream with an `error` event; no raw provider text | ✅ |
+| `/agent/run` maps tool/provider errors to 400/429/502/503/504 JSON | ✅ |
+| Client cancellation reaches the provider and is recorded as cancelled | ✅ |
+| Calculator rejects non-arithmetic input and oversized work | ✅ |
+| "address"/"padding" no longer route to the calculator | ✅ |
+| Unused tool registries and duplicate provider models removed | ✅ |
+| Live smoke test (NVIDIA): streamed tokens ~40 ms apart, TTFT metric recorded | ✅ |
+
+---
+
 # Cross-Reference Matrix
 
 | Artifact | Connected Documents |

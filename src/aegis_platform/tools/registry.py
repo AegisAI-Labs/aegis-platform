@@ -1,10 +1,6 @@
 from collections.abc import Callable
 from typing import Any
 
-from .calculator import calculator
-
-TOOL_REGISTRY = {"calculator": calculator}
-
 
 class ToolRegistry:
     def __init__(self) -> None:

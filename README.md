@@ -315,10 +315,17 @@ curl.exe -N `
 	--data-raw '{"message":"Explain streaming in two sentences."}'
 ```
 
-Both requests call the configured LLM provider and may incur API usage. The
-current `/agent/stream` implementation waits for a completed response, then
-emits it as spaced word chunks. This smoke test checks the SSE response and
-incremental delivery, not provider time-to-first-token streaming.
+Both requests call the configured LLM provider and may incur API usage.
+`/agent/stream` forwards provider chunks as they are generated (ADR-011):
+`token` events carry `{"text": ...}`, the stream ends with `done`, and failures
+end it with an `error` event `{"message": ..., "code": ...}`. Calculator
+requests return their result as a single `token`. On macOS/Linux use `curl -N`
+to see tokens as they arrive.
+
+`/agent/run` returns structured errors: `400` for invalid calculator input,
+`429` rate limited, `503` provider unavailable or quota exhausted, `504` timeout,
+`502` other provider failures. The body is
+`{"error": {"code", "message", "correlation_id"}}`.
 
 ---
 

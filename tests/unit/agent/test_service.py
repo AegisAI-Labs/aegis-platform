@@ -28,7 +28,7 @@ async def test_service_stream() -> None:
     service = AgentService(StubLLMProvider())
     chunks = [chunk async for chunk in service.stream("Hello")]
 
-    assert chunks == ["Hello ", "from ", "the ", "stub ", "LLM "]
+    assert chunks == ["Hello from the stub LLM"]
 
 
 @pytest.mark.asyncio
